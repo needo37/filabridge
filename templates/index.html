@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FilaBridge Dashboard</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        .content {
+            padding: 0;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .welcome-banner {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .welcome-banner h3 {
+            margin: 0 0 15px 0;
+            font-size: 1.5em;
+        }
+        .welcome-banner ol {
+            text-align: left;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .welcome-banner li {
+            margin: 8px 0;
+        }
+        .btn {
+            background: #28a745;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            text-decoration: none;
+            display: inline-block;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        /* Custom dropdown styles */
+        .custom-dropdown {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            max-width: 300px;
+        }
+        
+        .dropdown-button {
+            width: 100%;
+            padding: 10px 15px;
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 5px;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .dropdown-button:hover {
+            background: #4a4a4a;
+            border-color: #666;
+        }
+        
+        .dropdown-button.open {
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+            border-bottom-color: #3a3a3a;
+        }
+        
+        .dropdown-content {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #3a3a3a;
+            border: 1px solid #555;
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .dropdown-content.show {
+            display: block;
+        }
+        
+        .dropdown-option {
+            padding: 10px 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background-color 0.2s ease;
+        }
+        
+        .dropdown-option:hover {
+            background: #4a4a4a;
+        }
+        
+        .dropdown-option.selected {
+            background: #007bff;
+        }
+        
+        .color-swatch {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            border: 1px solid #666;
+            flex-shrink: 0;
+            background-color: #ccc;
+        }
+        
+        .option-text {
+            flex: 1;
+            font-size: 14px;
+        }
+        
+        .dropdown-arrow {
+            transition: transform 0.3s ease;
+        }
+        
+        .dropdown-arrow.open {
+            transform: rotate(180deg);
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .config-section {
+            background: rgba(255,255,255,0.05);
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .config-section h3 {
+            margin: 0 0 20px 0;
+            color: #fff;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            font-size: 16px;
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            transition: border-color 0.3s ease;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .form-group input[type="password"] {
+            border-color: #6f42c1;
+        }
+        .form-group small {
+            color: #ccc;
+            font-size: 0.9em;
+            margin-top: 5px;
+            display: block;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .printer {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            margin: 15px 0;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .printer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .printer-header h3 {
+            margin: 0;
+            color: #fff;
+        }
+        .status {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.8em;
+        }
+        .status.idle { background: #d4edda; color: #155724; }
+        .status.printing { background: #fff3cd; color: #856404; }
+        .status.offline { background: #f8d7da; color: #721c24; }
+        .status.not_configured { background: #e2e3e5; color: #383d41; }
+        .mapping-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+        .mapping-section h4 {
+            color: #fff;
+            margin-bottom: 15px;
+        }
+        .mapping-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            margin: 5px 0;
+            border-radius: 5px;
+        }
+        .help-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            margin: 20px 0;
+            border-radius: 10px;
+        }
+        .help-section h4 {
+            margin: 0 0 15px 0;
+        }
+        .help-section ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .help-section li {
+            margin: 8px 0;
+        }
+        .hidden { display: none; }
+        
+        /* Printer Management Styles */
+        .printer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .printer-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+        .printer-card:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(255,255,255,0.2);
+        }
+        .printer-card h3 {
+            margin: 0 0 10px 0;
+            color: #fff;
+        }
+        .printer-card .printer-info {
+            margin: 10px 0;
+            color: #ccc;
+        }
+        .printer-card .printer-actions {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        .printer-card .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .btn-danger {
+            background: #dc3545;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .section-header h2 {
+            margin: 0;
+            color: #fff;
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+        }
+        .modal-content {
+            background-color: #2a2a2a;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            position: relative;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-header h3 {
+            margin: 0;
+            color: #fff;
+        }
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+        .close:hover {
+            color: #fff;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #fff;
+            font-weight: bold;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 4px;
+            background-color: rgba(255,255,255,0.1);
+            color: #fff;
+            font-size: 14px;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #4CAF50;
+            background-color: rgba(255,255,255,0.15);
+        }
+        .form-group small {
+            color: #ccc;
+            font-size: 12px;
+            margin-top: 5px;
+            display: block;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        /* Tab Styles */
+        .tabs {
+            display: flex;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px 8px 0 0;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: transparent;
+            border: none;
+            color: #ccc;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border-radius: 8px 8px 0 0;
+            position: relative;
+        }
+        .tab:hover {
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+        }
+        .tab.active {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+            border-bottom: 3px solid #4CAF50;
+        }
+        .tab-content {
+            display: none;
+            padding: 30px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        
+        .btn-small {
+            padding: 5px 12px;
+            font-size: 12px;
+            min-width: 60px;
+        }
+        
+        .toolhead-select {
+            background: rgba(255,255,255,0.1) !important;
+            color: #fff !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+            padding: 8px !important;
+            border-radius: 4px !important;
+        }
+        
+        .toolhead-select option {
+            background: #1a1a1a !important;
+            color: #fff !important;
+        }
+        
+        .toolhead-label {
+            color: #fff !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔗 FilaBridge Dashboard</h1>
+            <p>The missing link between printers and filament inventory</p>
+        </div>
+        
+        <div class="content">
+            <!-- Tab Navigation -->
+            <ul class="tabs">
+                <li><button class="tab active" onclick="switchTab('status')">📊 Filament Status</button></li>
+                <li><button class="tab" onclick="switchTab('settings')">⚙️ Settings</button></li>
+            </ul>
+            
+            <!-- Filament Status Tab (Default) -->
+            <div id="status-tab" class="tab-content active">
+                <div id="status">
+                    <h2>Printer Status</h2>
+
+                    {{if .IsFirstRun}}
+                    <div class="welcome-banner">
+                        <h3>🎉 Welcome to FilaBridge!</h3>
+                        <p>This appears to be your first time running FilaBridge. Let's get you set up with your printer configuration.</p>
+                        <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 8px; margin: 20px 0;">
+                            <h4 style="margin-top: 0;">Quick Setup Steps:</h4>
+                            <ol>
+                                <li><strong>Start Spoolman:</strong> <code>docker run -d --name spoolman -p 8000:8000 -v spoolman-data:/home/spoolman/data ghcr.io/donkie/spoolman:latest</code></li>
+                                <li><strong>Configure Printers:</strong> Click 'Configure Now' below to set your printer IP addresses</li>
+                                <li><strong>Map Spools:</strong> Assign your filament spools to specific toolheads</li>
+                                <li><strong>Start Printing:</strong> The system will automatically track filament usage!</li>
+                            </ol>
+                        </div>
+                        <button class="btn" onclick="toggleConfig()">🚀 Start Configuration</button>
+                    </div>
+                    {{end}}
+
+                    {{if .HasErrors}}
+                    <div style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 20px; margin: 20px 0; border-radius: 8px;">
+                        <h4 style="margin-top: 0;">⚠️ Connection Issues</h4>
+                        <p>There are some connection issues. Please check your configuration and ensure Spoolman is running.</p>
+                        {{if .SpoolmanError}}
+                        <p><strong>Spoolman Error:</strong> {{.SpoolmanError}}</p>
+                        {{end}}
+                    </div>
+                    {{end}}
+
+                    {{if not .SpoolmanConnected}}
+                    <div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 20px; margin: 20px 0; border-radius: 8px;">
+                        <h4 style="margin-top: 0;">⚠️ Spoolman Connection Issue</h4>
+                        <p>Cannot connect to Spoolman. Please ensure Spoolman is running and the URL is correct.</p>
+                        {{if .SpoolmanError}}
+                        <p><strong>Error:</strong> {{.SpoolmanError}}</p>
+                        {{end}}
+                    </div>
+                    {{end}}
+
+
+
+                    {{range $printerID, $printerConfig := .Printers}}
+                    {{$printerData := index $.Status.Printers $printerID}}
+                    <div class="printer">
+                        <div class="printer-header">
+                            <h3>{{$printerData.Name}}</h3>
+                            <span class="status {{$printerData.State}}">
+                                {{$printerData.State}}
+                            </span>
+                        </div>
+                        
+                        <p><strong>Model:</strong> {{$printerConfig.Model}} ({{$printerConfig.Toolheads}} toolhead{{if ne $printerConfig.Toolheads 1}}s{{end}})</p>
+
+                        <div class="mapping-section">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <h3>Toolhead Mappings</h3>
+                                <button class="btn" onclick="mapAllSpools('{{$printerData.Name}}', '{{$printerConfig.Toolheads}}')">🗺️ Map Spools</button>
+                            </div>
+                            <h4>Map Spools to Toolheads</h4>
+                            <div style="margin-top: 15px;">
+                                {{$mapping := index $.Status.ToolheadMappings $printerID}}
+                                {{range $toolheadID := generateToolheadIDs $printerConfig.Toolheads}}
+                                {{$mappedSpool := index $mapping $toolheadID}}
+                                <div class="toolhead-mapping-row" style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px;">
+                                    <div class="toolhead-label" style="min-width: 100px; font-weight: bold;">Toolhead {{$toolheadID}}:</div>
+                                    <div class="custom-dropdown" style="flex: 1; max-width: 300px;">
+                                        <div class="dropdown-button">
+                                            <div style="display: flex; align-items: center; gap: 10px;">
+                                                {{if $mappedSpool.SpoolID}}
+                                                {{range $.Spools}}
+                                                {{if eq .ID $mappedSpool.SpoolID}}
+                                                <div class="color-swatch" data-color="{{.Filament.ColorHex}}"></div>
+                                                <span>{{if .Material}}{{.Material}}{{else}}Unknown Material{{end}} - {{if .Brand}}{{.Brand}}{{else}}Unknown Brand{{end}} - {{if .Name}}{{.Name}}{{else}}Unnamed Spool{{end}}{{if .RemainingWeight}} ({{printf "%.0f" .RemainingWeight}}g remaining){{end}}</span>
+                                                {{end}}
+                                                {{end}}
+                                                {{else}}
+                                                <div class="color-swatch" style="background-color: #ccc;"></div>
+                                                <span>Select Spool</span>
+                                                {{end}}
+                                            </div>
+                                            <span class="dropdown-arrow">▼</span>
+                                        </div>
+                                        <div class="dropdown-content">
+                                            <div class="dropdown-option" data-value="" data-color="">
+                                                <div class="color-swatch" style="background-color: #ccc;"></div>
+                                                <div class="option-text">Select Spool</div>
+                                            </div>
+                                            {{range $.Spools}}
+                                            <div class="dropdown-option" data-value="{{.ID}}" data-color="{{.Filament.ColorHex}}" {{if $mappedSpool.SpoolID}}{{if eq .ID $mappedSpool.SpoolID}}class="selected"{{end}}{{end}}>
+                                                <div class="color-swatch" data-color="{{.Filament.ColorHex}}"></div>
+                                                <div class="option-text">{{if .Material}}{{.Material}}{{else}}Unknown Material{{end}} - {{if .Brand}}{{.Brand}}{{else}}Unknown Brand{{end}} - {{if .Name}}{{.Name}}{{else}}Unnamed Spool{{end}}{{if .RemainingWeight}} ({{printf "%.0f" .RemainingWeight}}g remaining){{end}}</div>
+                                            </div>
+                                            {{end}}
+                                        </div>
+                                        <input type="hidden" name="spool_{{$printerID}}_{{$toolheadID}}" value="{{if $mappedSpool.SpoolID}}{{$mappedSpool.SpoolID}}{{end}}">
+                                    </div>
+                                </div>
+                                {{end}}
+                            </div>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            
+            <!-- Settings Tab -->
+            <div id="settings-tab" class="tab-content">
+                <div class="section-header">
+                    <h2>⚙️ Settings</h2>
+                </div>
+                
+                <!-- Printer Management Section -->
+                <div class="config-section">
+                    <h3>🖨️ Printer Management</h3>
+                    <div style="margin-bottom: 20px;">
+                        <button class="btn" onclick="showAddPrinterForm()">➕ Add Printer</button>
+                    </div>
+                    <div id="printer-list" class="printer-grid">
+                        <!-- Printers will be loaded here -->
+                    </div>
+                </div>
+                
+                <!-- System Configuration Section -->
+                <div class="config-section">
+                    <h3>🔧 System Configuration</h3>
+                    <div id="config-form">
+                        <p>Loading configuration...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Printer Modal -->
+    <div id="addPrinterModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>➕ Add New Printer</h3>
+                <button class="close" onclick="closeAddPrinterModal()">&times;</button>
+            </div>
+            <form id="addPrinterForm">
+                <div class="form-group">
+                    <label for="printerName">Printer Name *</label>
+                    <input type="text" id="printerName" name="name" required placeholder="e.g., My CORE One">
+                    <small>Give your printer a friendly name</small>
+                </div>
+                <div class="form-group">
+                    <label for="printerIP">IP Address *</label>
+                    <input type="text" id="printerIP" name="ip_address" required placeholder="e.g., 192.168.1.100">
+                    <small>Local IP address of your printer</small>
+                </div>
+                <div class="form-group">
+                    <label for="printerAPIKey">API Key *</label>
+                    <input type="password" id="printerAPIKey" name="api_key" required placeholder="Enter your PrusaLink API key">
+                    <small>Get this from your printer: Settings → PrusaLink → API Key</small>
+                </div>
+                <div class="form-group">
+                    <label for="printerToolheads">Number of Toolheads *</label>
+                    <select id="printerToolheads" name="toolheads" required>
+                        <option value="1">1 Toolhead</option>
+                        <option value="2">2 Toolheads</option>
+                        <option value="3">3 Toolheads</option>
+                        <option value="4">4 Toolheads</option>
+                        <option value="5">5 Toolheads</option>
+                    </select>
+                    <small>How many toolheads does your printer have?</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddPrinterModal()">Cancel</button>
+                    <button type="submit" class="btn">Add Printer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Printer Modal -->
+    <div id="editPrinterModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>✏️ Edit Printer</h3>
+                <button class="close" onclick="closeEditPrinterModal()">&times;</button>
+            </div>
+            <form id="editPrinterForm">
+                <input type="hidden" id="editPrinterId" name="printerId">
+                <div class="form-group">
+                    <label for="editPrinterName">Printer Name *</label>
+                    <input type="text" id="editPrinterName" name="name" required placeholder="e.g., My CORE One">
+                    <small>Give your printer a friendly name</small>
+                </div>
+                <div class="form-group">
+                    <label for="editPrinterModel">Model</label>
+                    <input type="text" id="editPrinterModel" name="model" placeholder="e.g., CORE One, XL, etc.">
+                    <small>Printer model (optional)</small>
+                </div>
+                <div class="form-group">
+                    <label for="editPrinterIP">IP Address *</label>
+                    <input type="text" id="editPrinterIP" name="ip_address" required placeholder="e.g., 192.168.1.100">
+                    <small>Local IP address of your printer</small>
+                </div>
+                <div class="form-group">
+                    <label for="editPrinterAPIKey">API Key *</label>
+                    <input type="password" id="editPrinterAPIKey" name="api_key" required placeholder="Enter your PrusaLink API key">
+                    <small>Get this from your printer: Settings → PrusaLink → Password</small>
+                </div>
+                <div class="form-group">
+                    <label for="editPrinterToolheads">Number of Toolheads *</label>
+                    <select id="editPrinterToolheads" name="toolheads" required>
+                        <option value="1">1 Toolhead</option>
+                        <option value="2">2 Toolheads</option>
+                        <option value="3">3 Toolheads</option>
+                        <option value="4">4 Toolheads</option>
+                        <option value="5">5 Toolheads</option>
+                    </select>
+                    <small>How many toolheads does your printer have?</small>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditPrinterModal()">Cancel</button>
+                    <button type="submit" class="btn">Update Printer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Custom dropdown functionality
+        function initCustomDropdowns() {
+            document.querySelectorAll('.custom-dropdown').forEach(dropdown => {
+                const button = dropdown.querySelector('.dropdown-button');
+                const content = dropdown.querySelector('.dropdown-content');
+                const arrow = dropdown.querySelector('.dropdown-arrow');
+                
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    
+                    // Close other dropdowns
+                    document.querySelectorAll('.custom-dropdown').forEach(other => {
+                        if (other !== dropdown) {
+                            other.querySelector('.dropdown-content').classList.remove('show');
+                            other.querySelector('.dropdown-button').classList.remove('open');
+                            other.querySelector('.dropdown-arrow').classList.remove('open');
+                        }
+                    });
+                    
+                    // Toggle current dropdown
+                    content.classList.toggle('show');
+                    button.classList.toggle('open');
+                    arrow.classList.toggle('open');
+                });
+                
+                // Handle option selection
+                content.querySelectorAll('.dropdown-option').forEach(option => {
+                    option.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        
+                        // Update button text and selected state
+                        const selectedText = option.querySelector('.option-text').textContent;
+                        const selectedColor = option.dataset.color;
+                        const selectedValue = option.dataset.value;
+                        
+                        button.innerHTML = `
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="color-swatch" data-color="${selectedColor}"></div>
+                                <span>${selectedText}</span>
+                            </div>
+                            <span class="dropdown-arrow">▼</span>
+                        `;
+                        
+                        // Set the background color for the selected swatch
+                        const selectedSwatch = button.querySelector('.color-swatch');
+                        if (selectedSwatch && selectedColor) {
+                            selectedSwatch.style.backgroundColor = '#' + selectedColor;
+                        }
+                        
+                        // Update hidden input value
+                        const hiddenInput = dropdown.querySelector('input[type="hidden"]');
+                        if (hiddenInput) {
+                            hiddenInput.value = selectedValue;
+                        }
+                        
+                        // Update selected state
+                        content.querySelectorAll('.dropdown-option').forEach(opt => opt.classList.remove('selected'));
+                        option.classList.add('selected');
+                        
+                        // Close dropdown
+                        content.classList.remove('show');
+                        button.classList.remove('open');
+                        arrow.classList.remove('open');
+                    });
+                });
+            });
+            
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', () => {
+                document.querySelectorAll('.custom-dropdown').forEach(dropdown => {
+                    dropdown.querySelector('.dropdown-content').classList.remove('show');
+                    dropdown.querySelector('.dropdown-button').classList.remove('open');
+                    dropdown.querySelector('.dropdown-arrow').classList.remove('open');
+                });
+            });
+        }
+        
+        function loadConfiguration() {
+            fetch('/api/config')
+                .then(response => response.json())
+                .then(config => {
+                    const form = document.getElementById('config-form');
+                    form.innerHTML = `
+                        <div style="max-width: 600px; margin: 0 auto;">
+                            <div class="form-group">
+                                <label><strong>Spoolman URL:</strong></label>
+                                <input type="text" id="spoolman_url" value="${config.spoolman_url || ''}" placeholder="http://localhost:8000">
+                                <small>URL where Spoolman is running</small>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label><strong>Poll Interval (seconds):</strong></label>
+                                    <input type="number" id="poll_interval" value="${config.poll_interval || '30'}" min="10" max="300">
+                                    <small>How often to check printer status</small>
+                                </div>
+                                <div class="form-group">
+                                    <label><strong>Web Port:</strong></label>
+                                    <input type="text" id="web_port" value="${config.web_port || '5000'}" placeholder="5000">
+                                    <small>Port for this web interface</small>
+                                </div>
+                            </div>
+                            <div style="margin-top: 20px; text-align: center;">
+                                <button class="btn" onclick="saveConfiguration()">💾 Save Configuration</button>
+                            </div>
+                        </div>
+                    `;
+                })
+                .catch(error => {
+                    console.error('Error loading configuration:', error);
+                    document.getElementById('config-form').innerHTML = '<p style="color: red;">Error loading configuration</p>';
+                });
+        }
+        
+        function saveConfiguration() {
+            const config = {
+                spoolman_url: document.getElementById('spoolman_url').value,
+                poll_interval: document.getElementById('poll_interval').value,
+                web_port: document.getElementById('web_port').value
+            };
+            
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error saving configuration: ' + data.error);
+                } else {
+                    alert('Configuration saved successfully! The application will restart.');
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                alert('Error saving configuration: ' + error.message);
+            });
+        }
+        
+        function mapAllSpools(printerName, toolheadCount) {
+            const mappings = [];
+            let hasAnySelection = false;
+            
+            // Find the current printer container
+            const printerContainer = event.target.closest('.printer');
+            if (!printerContainer) {
+                alert('Could not find printer container');
+                return;
+            }
+            
+            // Collect all selected spools
+            for (let i = 0; i < toolheadCount; i++) {
+                // Try both old select elements and new custom dropdowns within this printer's container
+                const spoolSelect = printerContainer.querySelector(`select[id*="spool_"][id$="_${i}"]`);
+                const spoolHiddenInput = printerContainer.querySelector(`input[name*="spool_"][name$="_${i}"]`);
+                const spoolId = spoolSelect ? spoolSelect.value : (spoolHiddenInput ? spoolHiddenInput.value : '');
+                
+                if (spoolId) {
+                    mappings.push({
+                        toolhead_id: i,
+                        spool_id: parseInt(spoolId)
+                    });
+                    hasAnySelection = true;
+                }
+            }
+            
+            if (!hasAnySelection) {
+                alert('Please select at least one spool to map');
+                return;
+            }
+            
+            // Show loading state
+            const button = event.target;
+            const originalText = button.textContent;
+            button.disabled = true;
+            button.textContent = '🗺️ Mapping...';
+            
+            // Map all selected spools
+            const promises = mappings.map(mapping => 
+                fetch('/api/map_toolhead', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        printer_name: printerName,
+                        toolhead_id: mapping.toolhead_id,
+                        spool_id: mapping.spool_id
+                    })
+                })
+            );
+            
+            Promise.all(promises)
+            .then(responses => {
+                const results = responses.map(r => r.json());
+                return Promise.all(results);
+            })
+            .then(data => {
+                const errors = data.filter(result => result.error);
+                if (errors.length > 0) {
+                    alert('Some mappings failed: ' + errors.map(e => e.error).join(', '));
+                } else {
+                    alert(`Successfully mapped ${mappings.length} spool(s)!`);
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                alert('Error mapping spools: ' + error.message);
+            })
+            .finally(() => {
+                // Reset button state
+                button.disabled = false;
+                button.textContent = originalText;
+            });
+        }
+        
+        
+        // Printer Management Functions
+        function loadPrinters() {
+            fetch('/api/printers')
+                .then(response => response.json())
+                .then(data => {
+                    const printerList = document.getElementById('printer-list');
+                    printerList.innerHTML = '';
+                    
+                    if (data.printers && Object.keys(data.printers).length > 0) {
+                        for (const [printerId, printer] of Object.entries(data.printers)) {
+                            if (printerId === 'no_printers') continue;
+                            
+                            const printerCard = document.createElement('div');
+                            printerCard.className = 'printer-card';
+                            printerCard.innerHTML = `
+                                <h3>${printer.name || 'Unknown Printer'}</h3>
+                                <div class="printer-info">
+                                    <div><strong>Model:</strong> ${printer.model || 'Unknown'} (${printer.toolheads || 1} toolhead${printer.toolheads > 1 ? 's' : ''})</div>
+                                    <div><strong>IP:</strong> ${printer.ip_address || 'Not configured'}</div>
+                                    <div><strong>API Key:</strong> ${printer.api_key ? '••••••••' : 'Not configured'}</div>
+                                </div>
+                                <div class="printer-actions">
+                                    <button class="btn btn-small" onclick="editPrinter('${printerId}')">✏️ Edit</button>
+                                    <button class="btn btn-small btn-danger" onclick="deletePrinter('${printerId}')">🗑️ Delete</button>
+                                </div>
+                            `;
+                            printerList.appendChild(printerCard);
+                        }
+                    } else {
+                        printerList.innerHTML = '<div class="printer-card"><p>No printers configured. Click "Add Printer" to get started.</p></div>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading printers:', error);
+                    document.getElementById('printer-list').innerHTML = '<div class="printer-card"><p>Error loading printers. Please refresh the page.</p></div>';
+                });
+        }
+        
+        function showAddPrinterForm() {
+            document.getElementById('addPrinterModal').style.display = 'block';
+            document.getElementById('addPrinterForm').reset();
+        }
+        
+        function closeAddPrinterModal() {
+            document.getElementById('addPrinterModal').style.display = 'none';
+        }
+        
+        function closeEditPrinterModal() {
+            document.getElementById('editPrinterModal').style.display = 'none';
+        }
+        
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const addModal = document.getElementById('addPrinterModal');
+            const editModal = document.getElementById('editPrinterModal');
+            if (event.target == addModal) {
+                closeAddPrinterModal();
+            } else if (event.target == editModal) {
+                closeEditPrinterModal();
+            }
+        }
+        
+        function addPrinter(printerConfig) {
+            return fetch('/api/printers', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(printerConfig)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                return data;
+            });
+        }
+        
+
+        // Handle form submission
+        document.getElementById('addPrinterForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const name = formData.get('name');
+            const ipAddress = formData.get('ip_address');
+            const apiKey = formData.get('api_key');
+            const toolheads = parseInt(formData.get('toolheads'));
+            
+            // Show loading state
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.textContent = 'Detecting model...';
+            
+            // First detect printer model, then add printer
+            detectModelAndAddPrinter(name, ipAddress, apiKey, toolheads, submitButton, originalText);
+        });
+        
+        // Handle edit form submission
+        document.getElementById('editPrinterForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const printerId = formData.get('printerId');
+            const name = formData.get('name');
+            const model = formData.get('model');
+            const ipAddress = formData.get('ip_address');
+            const apiKey = formData.get('api_key');
+            const toolheads = parseInt(formData.get('toolheads'));
+            
+            // Show loading state
+            const submitButton = this.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.textContent = 'Updating...';
+            
+            // Create printer config
+            const printerConfig = {
+                name: name,
+                model: model,
+                ip_address: ipAddress,
+                api_key: apiKey,
+                toolheads: toolheads
+            };
+            
+            // Update the printer
+            fetch(`/api/printers/${printerId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(printerConfig)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Success - close modal and refresh
+                closeEditPrinterModal();
+                loadPrinters();
+            })
+            .catch(error => {
+                // Reset button state
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+                alert('Error updating printer: ' + error.message);
+            });
+        });
+        
+        function detectModelAndAddPrinter(name, ipAddress, apiKey, toolheads, submitButton, originalText) {
+            // Detect printer model only
+            fetch('/api/detect_printer', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    ip_address: ipAddress,
+                    api_key: apiKey
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Create printer config with detected model and user-specified toolheads
+                const printerConfig = {
+                    name: name,
+                    model: data.model,
+                    ip_address: ipAddress,
+                    api_key: apiKey,
+                    toolheads: toolheads
+                };
+                
+                // Add the printer
+                return addPrinter(printerConfig);
+            })
+            .then(() => {
+                // Success - close modal and refresh
+                closeAddPrinterModal();
+                loadPrinters();
+            })
+            .catch(error => {
+                // Reset button state
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+                alert('Error adding printer: ' + error.message);
+            });
+        }
+        
+        function editPrinter(printerId) {
+            // Get the current printer data
+            fetch('/api/printers')
+                .then(response => response.json())
+                .then(data => {
+                    const printer = data.printers[printerId];
+                    if (!printer) {
+                        alert('Printer not found');
+                        return;
+                    }
+                    
+                    // Populate the edit form with current data
+                    document.getElementById('editPrinterId').value = printerId;
+                    document.getElementById('editPrinterName').value = printer.name || '';
+                    document.getElementById('editPrinterModel').value = printer.model || '';
+                    document.getElementById('editPrinterIP').value = printer.ip_address || '';
+                    document.getElementById('editPrinterAPIKey').value = printer.api_key || '';
+                    document.getElementById('editPrinterToolheads').value = printer.toolheads || 1;
+                    
+                    // Show the edit modal
+                    document.getElementById('editPrinterModal').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error loading printer data:', error);
+                    alert('Error loading printer data');
+                });
+        }
+        
+        function deletePrinter(printerId) {
+            if (confirm('Are you sure you want to delete this printer?')) {
+                fetch(`/api/printers/${printerId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('Error deleting printer: ' + data.error);
+                    } else {
+                        alert('Printer deleted successfully!');
+                        loadPrinters();
+                    }
+                })
+                .catch(error => {
+                    alert('Error deleting printer: ' + error.message);
+                });
+            }
+        }
+        
+        // Tab switching functionality
+        function switchTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+            
+            // Load configuration when settings tab is opened
+            if (tabName === 'settings') {
+                loadConfiguration();
+            }
+        }
+
+        function toggleConfig() {
+            // Switch to the settings tab
+            switchTab('settings');
+        }
+
+        // Load printers when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPrinters();
+        });
+        
+        
+        // Initialize custom dropdowns when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initCustomDropdowns();
+            initColorSwatches();
+        });
+        
+        // Initialize color swatches based on data-color attributes
+        function initColorSwatches() {
+            document.querySelectorAll('.color-swatch[data-color]').forEach(swatch => {
+                const color = swatch.getAttribute('data-color');
+                if (color) {
+                    swatch.style.backgroundColor = '#' + color;
+                }
+            });
+        }
+    </script>
+</body>
+</html>

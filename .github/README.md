@@ -1,90 +1,238 @@
-# GitHub Actions Workflows
+# FilaBridge
 
-This directory contains automated workflows for the FilaBridge project.
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Go Version](https://img.shields.io/badge/Go-1.23-00ADD8?logo=go)](https://golang.org/)
+[![GitHub release](https://img.shields.io/github/v/release/needo37/filabridge)](https://github.com/needo37/filabridge/releases)
 
-## release.yml
+A high-performance Go microservice that bridges PrusaLink-compatible printers and Spoolman for (mostly) automatic filament inventory management. Originally designed for Prusa printers (CORE One, XL, MK4, etc.) but works with any printer that supports the PrusaLink API.
 
-Automatically builds cross-platform binaries and creates a GitHub release when you push a version tag.
+### The Problem
 
-### How to Trigger a Release
+I run multiple 3D printers and use Spoolman to track my filament inventory. The issue? I had to manually update filament usage after every print. With multi-material prints on my Prusa XL, this was getting tedious and error-prone.
 
-1. **Ensure all changes are committed** to the main branch
+## Features
 
-2. **Create a version tag**:
+- 🔗 **PrusaLink Compatibility**: Works with any PrusaLink-compatible printer (Prusa CORE One, XL, MK4, Mini, and more)
+- 📊 **Real-time Dashboard**: Web interface to view printer status and manage filament mappings
+- 🎯 **Multi-Toolhead Support**: Seamlessly handles single and multi-toolhead printers (tested with 5-toolhead Prusa XL)
+- 📈 **Smart Usage Tracking**: Automatically parses G-code files to accurately track filament consumption per toolhead
+- 💾 **Persistent Storage**: SQLite database stores toolhead mappings and complete print history
+- ⚡ **High Performance**: Single lightweight binary, minimal resource usage, fast execution
+- 🔧 **Web-based Config**: No config files needed - manage everything through the web UI
+
+## Why FilaBridge?
+
+Managing filament inventory across multiple 3D printers is tedious. FilaBridge automates this by:
+- Monitoring your printers in real-time
+- Tracking which spools are loaded on which toolheads
+- Automatically updating your Spoolman inventory when prints complete
+- Providing accurate filament usage by parsing G-code files
+
+No more manual updates or guesswork about remaining filament!
+
+## Screenshot
+
+![FilaBridge Dashboard](screenshots/dashboard.png)
+*FilaBridge web interface showing printer status and filament mappings*
+
+## Prerequisites
+
+- A PrusaLink-compatible 3D printer (Prusa or any printer with PrusaLink API)
+- PrusaLink enabled on your printer(s) for local network access
+- Spoolman
+- **For building from source**: Go 1.23 or higher
+
+## Installation
+
+### Option 1: Pre-built Binary (Easiest)
+
+1. **Download the latest release** for your platform from the [Releases page](https://github.com/needo37/filabridge/releases)
+   - Linux (amd64, arm64)
+   - macOS (amd64/Intel, arm64/Apple Silicon)
+   - Windows (amd64)
+
+2. **Make it executable** (Linux/macOS):
    ```bash
-   git tag -a v1.0.0 -m "Release v1.0.0"
+   chmod +x filabridge
    ```
 
-3. **Push the tag to GitHub**:
+3. **Run Spoolman** (if not already running):
    ```bash
-   git push origin v1.0.0
+   docker run -d --name spoolman -p 8000:8000 -v spoolman-data:/home/spoolman/data ghcr.io/donkie/spoolman:latest
    ```
 
-4. **Monitor the build**:
-   - Go to the "Actions" tab in your GitHub repository
-   - Watch the "Release" workflow run
-   - It will take a few minutes to build all platforms
+4. **Start FilaBridge**:
+   ```bash
+   ./filabridge
+   ```
 
-5. **Check the release**:
-   - Go to the "Releases" section
-   - Your new release will be created automatically
-   - All binaries will be attached
+5. **Configure**: Open `http://localhost:5000` and click "⚙️ Configuration"
 
-### Platforms Built
+### Option 2: Build from Source
 
-The workflow builds FilaBridge for:
-- **Linux AMD64** - Most Linux servers and desktops
-- **Linux ARM64** - Raspberry Pi, ARM servers
-- **Windows AMD64** - Windows 10+ (64-bit)
-- **macOS AMD64** - Intel Macs
-- **macOS ARM64** - Apple Silicon Macs (M1, M2, M3, etc.)
+1. **Clone and build**:
+   ```bash
+   git clone https://github.com/needo37/filabridge.git
+   cd filabridge
+   go mod download
+   go build -o filabridge .
+   ```
 
-### Build Details
+2. **Run Spoolman** (if not already running):
+   ```bash
+   docker run -d --name spoolman -p 8000:8000 -v spoolman-data:/home/spoolman/data ghcr.io/donkie/spoolman:latest
+   ```
 
-- **CGO Enabled**: Required for SQLite support
-- **Cross-compilation**: Uses platform-specific compilers
-- **Checksums**: SHA256 checksums generated for verification
-- **Release Notes**: Auto-generated from workflow template
+3. **Start FilaBridge**:
+   ```bash
+   ./filabridge
+   ```
 
-### Troubleshooting
+## Configuration
 
-**If the build fails:**
+The system stores all configuration in the SQLite database. No environment variables or configuration files are needed!
 
-1. Check the Actions log for errors
-2. Common issues:
-   - CGO compilation errors (check compiler installation)
-   - Go version mismatch
-   - Missing dependencies
+### First Run
 
-**To rebuild:**
+1. Start the application
+2. Open the web interface at `http://localhost:5000`
+3. Click "Start Configuration" button
+4. Enter a name for your Printer.
+5. Enter your PrusaLink IP Address and API key
+6. Choose the number of toolheads your printer has.
+7. Click "Save Configuration"
+8. The service will automatically restart with new settings
 
-1. Delete the failed release (if created)
-2. Delete the tag: `git tag -d v1.0.0 && git push origin :refs/tags/v1.0.0`
-3. Fix the issue and create the tag again
+## Usage
 
-### Manual Release (if needed)
-
-If you need to create a release manually:
+### Running the Service
 
 ```bash
-# Build for each platform
-GOOS=linux GOARCH=amd64 go build -o filabridge-linux-amd64 .
-GOOS=linux GOARCH=arm64 go build -o filabridge-linux-arm64 .
-GOOS=windows GOARCH=amd64 go build -o filabridge-windows-amd64.exe .
-GOOS=darwin GOARCH=amd64 go build -o filabridge-darwin-amd64 .
-GOOS=darwin GOARCH=arm64 go build -o filabridge-darwin-arm64 .
+# Run both bridge service and web interface (recommended)
+./filabridge
 
-# Create checksums
-sha256sum filabridge-* > checksums.txt
+# Custom host and port
+./filabridge --host 0.0.0.0 --port 8080
 ```
 
-Then create a release manually through the GitHub web interface.
+### Web Interface
 
-### Future Workflows
+The web interface provides:
 
-Consider adding:
-- **CI tests** - Run tests on every push/PR
-- **Docker image builds** - Build and push Docker images
-- **Code quality checks** - Linting, formatting validation
-- **Security scans** - Dependency vulnerability scanning
+- **Printer Status**: Real-time view of printer states and current jobs
+- **Toolhead Mapping**: Assign filament spools to specific toolheads
+- **Progress Monitoring**: Visual progress bars for active prints
+- **Auto-refresh**: Updates every 30 seconds automatically
 
+### Filament Management
+
+1. **Add spools to Spoolman**: Use Spoolman's web interface to add your filament spools
+2. **Map spools to toolheads**: Use the FilaBridge web interface to assign spools
+3. **Monitor usage**: The system automatically tracks and updates filament usage
+
+## API Endpoints
+
+The web interface also provides REST API endpoints:
+
+- `GET /api/status` - Get current printer status and mappings
+- `GET /api/spools` - Get all spools from Spoolman
+- `POST /api/map_toolhead` - Map a spool to a toolhead
+- `POST /api/unmap_toolhead` - Unmap a spool from a toolhead
+
+## Project Structure
+
+```
+filabridge/
+├── main.go                 # Application entry point
+├── config.go              # Configuration management
+├── prusalink.go           # PrusaLink API client
+├── spoolman.go            # Spoolman API client
+├── bridge.go              # Core monitoring and tracking logic
+├── web.go                 # HTTP server and web interface
+├── templates/             # HTML templates
+├── go.mod                 # Go module definition
+└── README.md              # Documentation
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Printers not accessible**:
+   - Check IP addresses in the web interface configuration
+   - Ensure PrusaLink is enabled on both printers
+   - Verify network connectivity
+
+2. **Spoolman connection failed**:
+   - Make sure Spoolman is running
+   - Check the Spoolman URL in the web interface configuration
+   - Verify Spoolman is accessible at the specified URL
+
+3. **Filament usage not tracked**:
+   - Ensure spools are mapped to toolheads
+   - Check that prints are completing (not just pausing)
+   - Verify PrusaLink API is returning filament usage data
+
+### Logs
+
+The service logs important events to the console. Look for:
+- Printer status updates
+- Filament usage calculations
+- Spoolman update confirmations
+- Error messages
+
+## Development
+
+### Building from Source
+
+```bash
+# Download dependencies
+go mod download
+
+# Build the application
+go build -o filabridge .
+
+# Run tests
+go test ./...
+
+# Run with race detection
+go run -race .
+```
+
+## Contributing
+
+Contributions are welcome! Here's how you can help:
+
+- 🐛 **Report bugs**: Open an issue with details about the problem
+- 💡 **Suggest features**: Share your ideas for improvements
+- 🔧 **Submit PRs**: Fix bugs or add features (please open an issue first for major changes)
+- 📖 **Improve docs**: Help make the documentation clearer
+- ⭐ **Star the repo**: Show your support!
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+## Roadmap
+
+- [ ] Support for additional printer APIs
+- [ ] Provide a Docker Image
+- [ ] NFC Support
+- [ ] Mobile-responsive UI improvements
+
+## Support the Project
+
+If you find FilaBridge useful:
+- ⭐ Star the repository
+- 🐛 Report bugs and suggest features
+- 📢 Share it with the 3D printing community
+- 🤝 Contribute code or documentation
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+For issues specific to:
+- **PrusaLink**: Check Prusa's documentation
+- **Spoolman**: Visit the [Spoolman GitHub repository](https://github.com/pdrd/spoolman)
+- **This bridge**: Open an issue in this repository

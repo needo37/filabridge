@@ -32,8 +32,7 @@ No more manual updates or guesswork about remaining filament!
 
 ## Screenshot
 
-![FilaBridge Dashboard](screenshots/dashboard.png)
-*FilaBridge web interface showing printer status and filament mappings*
+![FilaBridge Dashboard](https://github.com/needo37/filabridge/raw/main/screenshots/dashboard.png)
 
 ## Prerequisites
 

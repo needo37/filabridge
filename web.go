@@ -1,16 +1,20 @@
 package main
 
 import (
+	"embed"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+//go:embed templates/*
+var templatesFS embed.FS
 
 // WebServer handles HTTP requests using Gin
 type WebServer struct {
@@ -43,11 +47,11 @@ func generateToolheadIDs(count int) []int {
 
 // setupRoutes configures all the routes
 func (ws *WebServer) setupRoutes() {
-	// Load HTML templates with custom functions
-	ws.router.SetFuncMap(template.FuncMap{
+	// Load HTML templates with custom functions from embedded filesystem
+	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
 		"generateToolheadIDs": generateToolheadIDs,
-	})
-	ws.router.LoadHTMLGlob("templates/*")
+	}).ParseFS(templatesFS, "templates/*"))
+	ws.router.SetHTMLTemplate(tmpl)
 
 	// Static files
 	ws.router.Static("/static", "./static")

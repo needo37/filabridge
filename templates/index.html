@@ -523,15 +523,6 @@
                     </div>
                     {{end}}
 
-                    {{if .HasErrors}}
-                    <div style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 20px; margin: 20px 0; border-radius: 8px;">
-                        <h4 style="margin-top: 0;">⚠️ Connection Issues</h4>
-                        <p>There are some connection issues. Please check your configuration and ensure Spoolman is running.</p>
-                        {{if .SpoolmanError}}
-                        <p><strong>Spoolman Error:</strong> {{.SpoolmanError}}</p>
-                        {{end}}
-                    </div>
-                    {{end}}
 
                     {{if not .SpoolmanConnected}}
                     <div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 20px; margin: 20px 0; border-radius: 8px;">

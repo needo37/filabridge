@@ -121,8 +121,9 @@ jobs:
             ```
             
             ## What's New
+            - Embedded the templates/ directory so now the binary will start correctly.
+            - Removed duplicate connection error display
             
-            See the full changelog below.
           draft: false
           prerelease: false
         env:

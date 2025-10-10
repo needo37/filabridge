@@ -1,0 +1,87 @@
+style: github
+template: CHANGELOG.tpl.md
+info:
+  title: Changelog
+  repository_url: https://github.com/needo37/filabridge
+options:
+  commits:
+    filters:
+      Type:
+        - feat
+        - fix
+        - docs
+        - chore
+        - refactor
+        - perf
+        - test
+        - ci
+  commit_groups:
+    title_order:
+      - feat
+      - fix
+      - docs
+      - chore
+      - refactor
+      - perf
+      - test
+      - ci
+    group_by: Type
+  header:
+    pattern: "^(.+)$"
+    pattern_maps:
+      - Version
+  issues:
+    prefix:
+      - "#"
+      - "gh-"
+  refs:
+    - action_a
+    - action_b
+  commit_parsers:
+    - body:
+        pattern: "(?s)(.+)"
+        group: 1
+      body_parsers:
+        - name: parseCoAuthors
+          pattern: "^Co-authored-by: (.*) <(.*)>$"
+          group: 1
+      hash:
+        pattern: "^(.+)$"
+        group: 1
+      message:
+        patterns:
+          - "^(.+)$"
+      message_parsers:
+        - name: parseType
+          pattern: "^(feat|fix|docs|chore|refactor|perf|test|ci)(\\(.+\\))?: (.+)$"
+          group: 1
+        - name: parseScope
+          pattern: "^(feat|fix|docs|chore|refactor|perf|test|ci)(\\(.+\\))?: (.+)$"
+          group: 2
+        - name: parseSubject
+          pattern: "^(feat|fix|docs|chore|refactor|perf|test|ci)(\\(.+\\))?: (.+)$"
+          group: 3
+  field_maps:
+    commit:
+      - name: Type
+        source: parseType
+      - name: Scope
+        source: parseScope
+      - name: Subject
+        source: parseSubject
+      - name: Body
+        source: body
+      - name: CoAuthors
+        source: parseCoAuthors
+  filters:
+    exclude:
+      - "^Merge"
+      - "^Revert"
+      - "^refactor\\(release\\):"
+      - "^chore\\(release\\):"
+      - "^docs\\(release\\):"
+      - "^style\\(release\\):"
+      - "^test\\(release\\):"
+      - "^ci\\(release\\):"
+      - "^perf\\(release\\):"
+      - "^build\\(release\\):"

@@ -39,9 +39,59 @@ Feature requests are welcome! Please:
 
 - **One feature per PR**: Keep changes focused
 - **Follow Go conventions**: Run `go fmt` and `go vet`
-- **Write clear commits**: Use descriptive commit messages
+- **Write clear commits**: Use conventional commit format (see below)
 - **Update tests**: Add tests for new features
 - **Document changes**: Update README if user-facing
+
+#### Conventional Commits
+
+We use [Conventional Commits](https://www.conventionalcommits.org/) to automatically generate changelogs. Please format your commit messages as follows:
+
+```
+type(optional-scope): brief description
+
+optional body
+
+optional footer
+```
+
+**Commit Types:**
+- `feat:` - New feature (appears in "Added" section)
+- `fix:` - Bug fix (appears in "Fixed" section)
+- `docs:` - Documentation changes (appears in "Documentation" section)
+- `chore:` - Maintenance tasks (appears in "Changed" section)
+- `refactor:` - Code refactoring (appears in "Changed" section)
+- `perf:` - Performance improvements (appears in "Changed" section)
+- `test:` - Test additions/changes
+- `ci:` - CI/CD changes
+
+**Examples:**
+```bash
+feat: add support for multi-toolhead printers
+fix(web): resolve dashboard refresh issue
+docs: update installation instructions
+chore: update dependencies
+refactor(api): simplify printer status endpoint
+perf: optimize database queries
+test: add unit tests for spoolman client
+ci: add automated changelog generation
+```
+
+**Breaking Changes:**
+Add `!` after the type for breaking changes:
+```bash
+feat!: change API response format
+```
+
+**Scope (optional):**
+Use scope to indicate the area of codebase affected:
+```bash
+feat(web): add dark mode toggle
+fix(api): handle connection timeouts
+docs(readme): update installation steps
+```
+
+This format helps us automatically generate changelogs and determine semantic version bumps.
 
 ## Development Setup
 

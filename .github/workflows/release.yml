@@ -82,6 +82,47 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+      - name: Install git-chglog
+        run: |
+          curl -sSL https://git.io/git-chglog | bash -s -- -b /usr/local/bin
+          git-chglog --version
+
+      - name: Generate changelog
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "Generating changelog for version: $VERSION"
+          
+          # Generate changelog for this version only
+          git-chglog --output CHANGELOG.md --next-tag $VERSION
+          
+          # Show what was generated
+          echo "Generated changelog:"
+          cat CHANGELOG.md
+
+      - name: Commit updated changelog
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add CHANGELOG.md
+          git commit -m "chore(release): update changelog for ${{ github.ref_name }}" || exit 0
+          git push
+
+      - name: Extract changelog for release notes
+        id: changelog
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "Extracting changelog for release notes: $VERSION"
+          
+          # Extract content for this version from the generated changelog
+          CHANGELOG=$(awk "/## \[$VERSION\]/,/## \[.*\]/{if(/## \[$VERSION\]/) next; if(/## \[.*\]/) exit; print}" CHANGELOG.md)
+          
+          # Output the changelog
+          {
+            echo "CHANGELOG<<EOF"
+            echo "$CHANGELOG"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -121,8 +162,7 @@ jobs:
             ```
             
             ## What's New
-            - Embedded the templates/ directory so now the binary will start correctly.
-            - Removed duplicate connection error display
+            ${{ steps.changelog.outputs.CHANGELOG }}
             
           draft: false
           prerelease: false

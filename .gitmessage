@@ -1,0 +1,27 @@
+# <type>(<scope>): <subject>
+#
+# <body>
+#
+# <footer>
+
+# Type should be one of the following:
+# * feat: A new feature
+# * fix: A bug fix
+# * docs: Documentation only changes
+# * chore: Changes to the build process or auxiliary tools
+# * refactor: A code change that neither fixes a bug nor adds a feature
+# * perf: A code change that improves performance
+# * test: Adding missing tests or correcting existing tests
+# * ci: Changes to our CI configuration files and scripts
+#
+# Scope should be the area of the codebase affected (optional)
+# Examples: web, api, config, docs, etc.
+#
+# Subject should be a short, imperative description of the change
+# Examples: "add dark mode toggle", "fix connection timeout", "update README"
+#
+# Body should explain what and why vs. how
+# Examples: "This change improves performance by caching database queries"
+#
+# Footer should contain any information about Breaking Changes
+# Examples: "BREAKING CHANGE: API response format has changed"

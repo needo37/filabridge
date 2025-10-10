@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -80,43 +79,15 @@ func LoadConfig(bridge *FilamentBridge) (*Config, error) {
 
 	// Process each printer configuration
 	for printerID, printerConfig := range printerConfigs {
-		printerName := printerConfig.Name
-		printerModel := printerConfig.Model
-		toolheads := printerConfig.Toolheads
-
-		// Attempt to get actual printer info from PrusaLink if we have an API key
-		if printerConfig.APIKey != "" && printerConfig.IPAddress != "" {
-			client := NewPrusaLinkClient(printerConfig.IPAddress, printerConfig.APIKey)
-			printerInfo, err := client.GetPrinterInfo()
-			if err != nil {
-				fmt.Printf("Error getting printer info for %s (%s): %v\n", printerConfig.IPAddress, printerName, err)
-				// Keep the stored config as fallback
-			} else {
-				// Don't override the user-configured name with hostname
-				// printerName = printerInfo.Hostname  // REMOVED: This was overriding user's configured name
-
-				// Only update model if it wasn't explicitly configured by user
-				if printerConfig.Model == "" || printerConfig.Model == "Unknown" {
-					// Determine model based on hostname or other indicators
-					if strings.Contains(strings.ToLower(printerInfo.Hostname), "core") {
-						printerModel = "CORE One"
-					} else if strings.Contains(strings.ToLower(printerInfo.Hostname), "xl") {
-						printerModel = "XL"
-					} else {
-						printerModel = "Unknown"
-					}
-				}
-				// Keep the user-configured toolheads count
-				// toolheads = 1  // REMOVED: This was overriding user's configured toolheads
-			}
-		}
-
+		// Load printer configs directly from database without making API calls
+		// This prevents race conditions and timeouts during config loading
+		// Live printer status will be handled by the monitoring cycle
 		config.Printers[printerID] = PrinterConfig{
-			Name:      printerName,
-			Model:     printerModel,
+			Name:      printerConfig.Name,
+			Model:     printerConfig.Model,
 			IPAddress: printerConfig.IPAddress,
 			APIKey:    printerConfig.APIKey,
-			Toolheads: toolheads,
+			Toolheads: printerConfig.Toolheads,
 		}
 	}
 

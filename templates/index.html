@@ -975,10 +975,27 @@
         function showAddPrinterForm() {
             document.getElementById('addPrinterModal').style.display = 'block';
             document.getElementById('addPrinterForm').reset();
+            
+            // Reset button state AFTER form reset with a fresh query
+            // Use setTimeout to ensure DOM is updated
+            setTimeout(() => {
+                const submitButton = document.querySelector('#addPrinterForm button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Add Printer';
+                }
+            }, 0);
         }
         
         function closeAddPrinterModal() {
             document.getElementById('addPrinterModal').style.display = 'none';
+            
+            // Ensure button state is reset when modal is closed
+            const submitButton = document.querySelector('#addPrinterForm button[type="submit"]');
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = 'Add Printer';
+            }
         }
         
         function closeEditPrinterModal() {
@@ -1015,6 +1032,12 @@
         // Handle form submission
         document.getElementById('addPrinterForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            
+            // Check if form is valid before proceeding
+            if (!this.checkValidity()) {
+                // Form has validation errors, don't change button state
+                return;
+            }
             
             const formData = new FormData(this);
             const name = formData.get('name');
@@ -1095,14 +1118,20 @@
             })
             .then(response => response.json())
             .then(data => {
+                // Check if there was an error (but still proceed if detection failed)
                 if (data.error) {
                     throw new Error(data.error);
                 }
                 
-                // Create printer config with detected model and user-specified toolheads
+                // Show warning if detection failed but still proceed
+                if (!data.detected && data.warning) {
+                    console.warn('Printer detection failed:', data.warning);
+                }
+                
+                // Create printer config with detected model (or "Unknown" if detection failed)
                 const printerConfig = {
                     name: name,
-                    model: data.model,
+                    model: data.model || "Unknown",
                     ip_address: ipAddress,
                     api_key: apiKey,
                     toolheads: toolheads

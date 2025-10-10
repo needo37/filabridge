@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,8 +19,9 @@ var templatesFS embed.FS
 
 // WebServer handles HTTP requests using Gin
 type WebServer struct {
-	bridge *FilamentBridge
-	router *gin.Engine
+	bridge         *FilamentBridge
+	router         *gin.Engine
+	operationMutex sync.Mutex // Protects add/update/delete printer operations
 }
 
 // NewWebServer creates a new web server with Gin
@@ -230,14 +232,18 @@ func (ws *WebServer) getPrintersHandler(c *gin.Context) {
 
 // addPrinterHandler adds a new printer configuration
 func (ws *WebServer) addPrinterHandler(c *gin.Context) {
+	// Serialize printer operations to prevent race conditions
+	ws.operationMutex.Lock()
+	defer ws.operationMutex.Unlock()
+
 	var printerConfig PrinterConfig
 	if err := c.ShouldBindJSON(&printerConfig); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Generate a unique printer ID
-	printerID := fmt.Sprintf("printer_%d", time.Now().Unix())
+	// Generate a unique printer ID using nanosecond timestamp + random component
+	printerID := fmt.Sprintf("printer_%d_%d", time.Now().UnixNano(), time.Now().Nanosecond()%1000)
 
 	// Save the printer configuration
 	if err := ws.bridge.SavePrinterConfig(printerID, printerConfig); err != nil {
@@ -256,6 +262,10 @@ func (ws *WebServer) addPrinterHandler(c *gin.Context) {
 
 // updatePrinterHandler updates an existing printer configuration
 func (ws *WebServer) updatePrinterHandler(c *gin.Context) {
+	// Serialize printer operations to prevent race conditions
+	ws.operationMutex.Lock()
+	defer ws.operationMutex.Unlock()
+
 	printerID := c.Param("id")
 
 	var printerConfig PrinterConfig
@@ -281,6 +291,10 @@ func (ws *WebServer) updatePrinterHandler(c *gin.Context) {
 
 // deletePrinterHandler deletes a printer configuration
 func (ws *WebServer) deletePrinterHandler(c *gin.Context) {
+	// Serialize printer operations to prevent race conditions
+	ws.operationMutex.Lock()
+	defer ws.operationMutex.Unlock()
+
 	printerID := c.Param("id")
 
 	// Delete the printer configuration
@@ -298,7 +312,7 @@ func (ws *WebServer) deletePrinterHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Printer deleted successfully"})
 }
 
-// detectPrinterHandler detects printer model and toolheads from PrusaLink API
+// detectPrinterHandler detects printer model from PrusaLink API
 func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 	var req struct {
 		IPAddress string `json:"ip_address" binding:"required"`
@@ -313,21 +327,21 @@ func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 	// Create PrusaLink client
 	client := NewPrusaLinkClient(req.IPAddress, req.APIKey)
 
-	// Get printer info
+	// Try to get printer info, but don't fail if it times out
 	printerInfo, err := client.GetPrinterInfo()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to connect to printer: " + err.Error()})
+		// If API call fails, return default values instead of error
+		// This allows users to add printers even if they're offline
+		c.JSON(http.StatusOK, gin.H{
+			"model":    "Unknown",
+			"hostname": "Unknown",
+			"detected": false,
+			"warning":  "Could not connect to printer. You can still add it manually.",
+		})
 		return
 	}
 
-	// Get actual toolhead count from PrusaLink API
-	toolheads, err := client.GetToolheadCount()
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get toolhead count: " + err.Error()})
-		return
-	}
-
-	// Determine model based on hostname and other indicators
+	// Determine model based on hostname
 	model := "Unknown"
 	hostname := strings.ToLower(printerInfo.Hostname)
 
@@ -343,12 +357,11 @@ func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 		model = "MINI+"
 	}
 
-	// Return detected information
+	// Return detected information (toolheads will be provided by user)
 	c.JSON(http.StatusOK, gin.H{
-		"model":     model,
-		"toolheads": toolheads,
-		"hostname":  printerInfo.Hostname,
-		"detected":  true,
+		"model":    model,
+		"hostname": printerInfo.Hostname,
+		"detected": true,
 	})
 }
 

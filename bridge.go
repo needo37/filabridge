@@ -266,6 +266,9 @@ func (b *FilamentBridge) GetAllPrinterConfigs() (map[string]PrinterConfig, error
 
 // SavePrinterConfig saves a printer configuration
 func (b *FilamentBridge) SavePrinterConfig(printerID string, config PrinterConfig) error {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
 	_, err := b.db.Exec(`
 		INSERT OR REPLACE INTO printer_configs (printer_id, name, model, ip_address, api_key, toolheads)
 		VALUES (?, ?, ?, ?, ?, ?)
@@ -278,6 +281,9 @@ func (b *FilamentBridge) SavePrinterConfig(printerID string, config PrinterConfi
 
 // DeletePrinterConfig deletes a printer configuration
 func (b *FilamentBridge) DeletePrinterConfig(printerID string) error {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
 	_, err := b.db.Exec("DELETE FROM printer_configs WHERE printer_id = ?", printerID)
 	if err != nil {
 		return fmt.Errorf("failed to delete printer config: %w", err)
@@ -285,13 +291,46 @@ func (b *FilamentBridge) DeletePrinterConfig(printerID string) error {
 	return nil
 }
 
+// GetConfigSnapshot returns a snapshot of the current config for safe iteration
+func (b *FilamentBridge) GetConfigSnapshot() *Config {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	// Return a copy of the config to prevent iteration issues during updates
+	if b.config == nil {
+		return nil
+	}
+
+	// Create a shallow copy of the config
+	configCopy := &Config{
+		SpoolmanURL:  b.config.SpoolmanURL,
+		PollInterval: b.config.PollInterval,
+		DBFile:       b.config.DBFile,
+		WebPort:      b.config.WebPort,
+		Printers:     make(map[string]PrinterConfig),
+	}
+
+	// Copy printer configs
+	for id, printer := range b.config.Printers {
+		configCopy.Printers[id] = printer
+	}
+
+	return configCopy
+}
+
 // ReloadConfig reloads the configuration from the database
 func (b *FilamentBridge) ReloadConfig() error {
+	// Load config outside the lock to minimize lock time
 	config, err := LoadConfig(b)
 	if err != nil {
 		return fmt.Errorf("failed to reload config: %w", err)
 	}
+
+	// Only lock briefly to swap the config pointer
+	b.mutex.Lock()
 	b.config = config
+	b.mutex.Unlock()
+
 	return nil
 }
 
@@ -422,13 +461,15 @@ func (b *FilamentBridge) LogPrintUsage(printerName string, toolheadID int, spool
 func (b *FilamentBridge) MonitorPrinters() {
 	log.Printf("Monitoring printers at %s", time.Now().Format(time.RFC3339))
 
-	if len(b.config.Printers) == 0 {
+	// Get a safe snapshot of the config to prevent iteration issues
+	configSnapshot := b.GetConfigSnapshot()
+	if configSnapshot == nil || len(configSnapshot.Printers) == 0 {
 		log.Printf("No printers configured - skipping monitoring")
 		return
 	}
 
 	// Monitor each printer using PrusaLink
-	for printerID, printerConfig := range b.config.Printers {
+	for printerID, printerConfig := range configSnapshot.Printers {
 		if printerID == "no_printers" {
 			continue // Skip placeholder
 		}
@@ -473,11 +514,11 @@ func (b *FilamentBridge) monitorPrusaLink(printerID string, config PrinterConfig
 		}
 	}
 
-	// Check if print just finished
-	b.mutex.Lock()
+	// Check if print just finished - minimize lock scope
+	b.mutex.RLock()
 	wasPrinting := b.wasPrinting[printerID]
 	storedJobFile := b.currentJobFile[printerID]
-	b.mutex.Unlock()
+	b.mutex.RUnlock()
 
 	// Debug logging for all printers
 	log.Printf("Printer %s (%s): state=%s, wasPrinting=%v, job=%s, stored_file=%s",
@@ -502,7 +543,7 @@ func (b *FilamentBridge) monitorPrusaLink(printerID string, config PrinterConfig
 		}
 	}
 
-	// Update state tracking
+	// Update state tracking - minimize lock scope
 	b.mutex.Lock()
 
 	// Store the current job filename when printing starts (only if not already stored)
@@ -630,9 +671,20 @@ func (b *FilamentBridge) GetStatus() (*PrinterStatus, error) {
 		Timestamp:        time.Now(),
 	}
 
+	// Get a safe snapshot of the config to prevent iteration issues
+	configSnapshot := b.GetConfigSnapshot()
+	if configSnapshot == nil {
+		// No printers configured
+		status.Printers["no_printers"] = PrinterData{
+			Name:  "No Printers Configured",
+			State: "not_configured",
+		}
+		return status, nil
+	}
+
 	// Get printer statuses from PrusaLink
-	if len(b.config.Printers) > 0 {
-		for printerID, printerConfig := range b.config.Printers {
+	if len(configSnapshot.Printers) > 0 {
+		for printerID, printerConfig := range configSnapshot.Printers {
 			if printerID == "no_printers" {
 				continue // Skip placeholder
 			}
@@ -666,7 +718,7 @@ func (b *FilamentBridge) GetStatus() (*PrinterStatus, error) {
 	}
 
 	// Get toolhead mappings for all printers
-	for printerID, printerConfig := range b.config.Printers {
+	for printerID, printerConfig := range configSnapshot.Printers {
 		if printerID == "no_printers" {
 			continue // Skip placeholder
 		}

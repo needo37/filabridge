@@ -95,7 +95,7 @@ func NewPrusaLinkClient(ipAddress, apiKey string) *PrusaLinkClient {
 		baseURL: fmt.Sprintf("http://%s", ipAddress),
 		apiKey:  apiKey,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second, // Reduced timeout to prevent hanging
 		},
 	}
 }

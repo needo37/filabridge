@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -79,8 +81,12 @@ func NewFilamentBridge(config *Config) (*FilamentBridge, error) {
 // initDatabase initializes the SQLite database
 func (b *FilamentBridge) initDatabase() error {
 	dbFile := "filabridge.db"
-	if b.config != nil {
+	if b.config != nil && b.config.DBFile != "" {
 		dbFile = b.config.DBFile
+	}
+	// Check for environment variable (path only, append filename)
+	if envDBPath := os.Getenv("FILABRIDGE_DB_PATH"); envDBPath != "" {
+		dbFile = filepath.Join(envDBPath, "filabridge.db")
 	}
 
 	db, err := sql.Open("sqlite3", dbFile)

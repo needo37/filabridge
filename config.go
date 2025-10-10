@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -56,7 +58,7 @@ func LoadConfig(bridge *FilamentBridge) (*Config, error) {
 	config := &Config{
 		SpoolmanURL:  configValues["spoolman_url"],
 		PollInterval: time.Duration(pollInterval) * time.Second,
-		DBFile:       "filabridge.db",
+		DBFile:       getDBFilePath(),
 		WebPort:      configValues["web_port"],
 		Printers:     make(map[string]PrinterConfig),
 	}
@@ -130,4 +132,12 @@ func LoadConfig(bridge *FilamentBridge) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+// getDBFilePath returns the database file path, checking environment variable first
+func getDBFilePath() string {
+	if dbPath := os.Getenv("FILABRIDGE_DB_PATH"); dbPath != "" {
+		return filepath.Join(dbPath, "filabridge.db")
+	}
+	return "filabridge.db"
 }

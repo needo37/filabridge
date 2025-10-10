@@ -39,7 +39,7 @@ EXPOSE 5000
 
 # Set environment variables
 ENV GIN_MODE=release
-ENV DB_FILE=/app/data/filabridge.db
+ENV FILABRIDGE_DB_PATH=/app/data
 
 # Run the application
 CMD ["./main"]

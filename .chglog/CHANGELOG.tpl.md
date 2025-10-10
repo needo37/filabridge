@@ -11,6 +11,6 @@
 {{ range .Commits }}
 - {{ .Subject }}{{ if .Scope }} ({{ .Scope }}){{ end }}
 {{ end }}
-{{ end }}
 
+{{ end }}
 {{ end }}

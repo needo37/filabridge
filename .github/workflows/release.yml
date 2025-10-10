@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -114,7 +116,7 @@ jobs:
           git-chglog --version
           
           # Generate changelog for this version only
-          if git-chglog --output CHANGELOG.md --next-tag $VERSION; then
+          if git-chglog --output CHANGELOG.md; then
             echo "git-chglog succeeded"
           else
             echo "git-chglog failed, falling back to manual generation"
@@ -155,12 +157,19 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          
+          # Check if we're in detached HEAD and checkout main branch
+          if [ "$(git rev-parse --abbrev-ref HEAD)" = "HEAD" ]; then
+            echo "In detached HEAD state, checking out main branch"
+            git checkout main
+          fi
+          
           git add CHANGELOG.md
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
             git commit -m "chore(release): update changelog for ${{ github.ref_name }}"
-            git push
+            git push origin main
           fi
 
       - name: Extract changelog for release notes

@@ -34,17 +34,10 @@ options:
     prefix:
       - "#"
       - "gh-"
-  refs:
-    - action_a
-    - action_b
   commit_parsers:
     - body:
         pattern: "(?s)(.+)"
         group: 1
-      body_parsers:
-        - name: parseCoAuthors
-          pattern: "^Co-authored-by: (.*) <(.*)>$"
-          group: 1
       hash:
         pattern: "^(.+)$"
         group: 1
@@ -71,8 +64,6 @@ options:
         source: parseSubject
       - name: Body
         source: body
-      - name: CoAuthors
-        source: parseCoAuthors
   filters:
     exclude:
       - "^Merge"

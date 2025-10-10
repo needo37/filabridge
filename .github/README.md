@@ -54,7 +54,7 @@ No more manual updates or guesswork about remaining filament!
 2. **Run FilaBridge**:
    ```bash
    docker run -d --name filabridge -p 5000:5000 \
-     -v filabridge-data:/app/data \
+     -v .:/app/data \
      ghcr.io/needo37/filabridge:latest
    ```
 
@@ -66,6 +66,8 @@ git clone https://github.com/needo37/filabridge.git
 cd filabridge
 docker-compose up -d
 ```
+
+The docker-compose.yml automatically sets the `FILABRIDGE_DB_PATH` environment variable to `/app/data` to ensure the database persists in the mounted volume.
 
 ### Option 2: Pre-built Binary
 
@@ -113,7 +115,7 @@ docker-compose up -d
 
 ## Configuration
 
-The system stores all configuration in the SQLite database. No environment variables or configuration files are needed!
+The system stores all configuration in the SQLite database. For Docker deployments, you can optionally set the `FILABRIDGE_DB_PATH` environment variable to specify where the database should be stored (defaults to `/app/data` in Docker).
 
 ### First Run
 

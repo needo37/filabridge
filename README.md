@@ -44,7 +44,31 @@ No more manual updates or guesswork about remaining filament!
 
 ## Installation
 
-### Option 1: Pre-built Binary (Easiest)
+### Option 1: Docker (Easiest)
+
+1. **Run Spoolman** (if not already running):
+   ```bash
+   docker run -d --name spoolman -p 8000:8000 -v spoolman-data:/home/spoolman/data ghcr.io/donkie/spoolman:latest
+   ```
+
+2. **Run FilaBridge**:
+   ```bash
+   docker run -d --name filabridge -p 5000:5000 \
+     -v filabridge-data:/app/data \
+     -e SPOOLMAN_URL=http://spoolman:8000 \
+     ghcr.io/needo37/filabridge:latest
+   ```
+
+3. **Configure**: Open `http://localhost:5000` and click "⚙️ Configuration"
+
+**Using docker-compose (recommended for full stack):**
+```bash
+git clone https://github.com/needo37/filabridge.git
+cd filabridge
+docker-compose up -d
+```
+
+### Option 2: Pre-built Binary
 
 1. **Download the latest release** for your platform from the [Releases page](https://github.com/needo37/filabridge/releases)
    - Linux (amd64, arm64)
@@ -68,7 +92,7 @@ No more manual updates or guesswork about remaining filament!
 
 5. **Configure**: Open `http://localhost:5000` and click "⚙️ Configuration"
 
-### Option 2: Build from Source
+### Option 3: Build from Source
 
 1. **Clone and build**:
    ```bash
@@ -214,7 +238,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 ## Roadmap
 
 - [ ] Support for additional printer APIs
-- [ ] Provide a Docker Image
+- [x] Provide a Docker Image
 - [ ] NFC Support
 - [ ] Mobile-responsive UI improvements
 

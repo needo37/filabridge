@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   filabridge:
-    build: .
+    image: ghcr.io/needo37/filabridge:latest
     ports:
       - "5000:5000"
     volumes:

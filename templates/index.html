@@ -593,7 +593,6 @@
                         <div class="mapping-section">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                                 <h3>Toolhead Mappings</h3>
-                                <button class="btn" onclick="mapAllSpools('{{$printerData.Name}}', '{{$printerConfig.Toolheads}}')">🗺️ Map Spools</button>
                             </div>
                             <h4>Map Spools to Toolheads</h4>
                             <div style="margin-top: 15px;">
@@ -834,28 +833,13 @@
                 
                 // Re-add click handlers for new options
                 optionsContainer.querySelectorAll('.dropdown-option').forEach(option => {
-                    option.addEventListener('click', (e) => {
+                    option.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         
                         // Update button text and selected state
                         const selectedText = option.querySelector('.option-text').textContent;
                         const selectedColor = option.dataset.color;
                         const selectedValue = option.dataset.value;
-                        
-                        const button = dropdown.querySelector('.dropdown-button');
-                        button.innerHTML = `
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <div class="color-swatch" data-color="${selectedColor}"></div>
-                                <span>${selectedText}</span>
-                            </div>
-                            <span class="dropdown-arrow">▼</span>
-                        `;
-                        
-                        // Set the background color for the selected swatch
-                        const selectedSwatch = button.querySelector('.color-swatch');
-                        if (selectedSwatch && selectedColor) {
-                            selectedSwatch.style.backgroundColor = '#' + selectedColor;
-                        }
                         
                         // Update hidden input value
                         if (hiddenInput) {
@@ -870,8 +854,14 @@
                         const content = dropdown.querySelector('.dropdown-content');
                         const arrow = dropdown.querySelector('.dropdown-arrow');
                         content.classList.remove('show');
+                        const button = dropdown.querySelector('.dropdown-button');
                         button.classList.remove('open');
                         arrow.classList.remove('open');
+                        
+                        // Auto-map the spool if a spool is selected (not "Select Spool")
+                        if (selectedValue && selectedValue !== '') {
+                            await autoMapSpool(dropdown, selectedValue, selectedText, selectedColor);
+                        }
                     });
                 });
                 
@@ -921,27 +911,13 @@
                 
                 // Handle option selection
                 content.querySelectorAll('.dropdown-option').forEach(option => {
-                    option.addEventListener('click', (e) => {
+                    option.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         
                         // Update button text and selected state
                         const selectedText = option.querySelector('.option-text').textContent;
                         const selectedColor = option.dataset.color;
                         const selectedValue = option.dataset.value;
-                        
-                        button.innerHTML = `
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <div class="color-swatch" data-color="${selectedColor}"></div>
-                                <span>${selectedText}</span>
-                            </div>
-                            <span class="dropdown-arrow">▼</span>
-                        `;
-                        
-                        // Set the background color for the selected swatch
-                        const selectedSwatch = button.querySelector('.color-swatch');
-                        if (selectedSwatch && selectedColor) {
-                            selectedSwatch.style.backgroundColor = '#' + selectedColor;
-                        }
                         
                         // Update hidden input value
                         const hiddenInput = dropdown.querySelector('input[type="hidden"]');
@@ -957,6 +933,11 @@
                         content.classList.remove('show');
                         button.classList.remove('open');
                         arrow.classList.remove('open');
+                        
+                        // Auto-map the spool if a spool is selected (not "Select Spool")
+                        if (selectedValue && selectedValue !== '') {
+                            await autoMapSpool(dropdown, selectedValue, selectedText, selectedColor);
+                        }
                     });
                 });
                 
@@ -1077,91 +1058,135 @@
             });
         }
         
-        function mapAllSpools(printerName, toolheadCount) {
-            const mappings = [];
-            let hasAnySelection = false;
-            
-            // Find the current printer container
-            const printerContainer = event.target.closest('.printer');
-            if (!printerContainer) {
-                alert('Could not find printer container');
+        // Auto-map spool to toolhead when selected
+        async function autoMapSpool(dropdown, selectedValue, selectedText, selectedColor) {
+            const toolheadRow = dropdown.closest('.toolhead-mapping-row');
+            if (!toolheadRow) {
+                console.error('Could not find toolhead mapping row');
                 return;
             }
             
-            // Collect all selected spools
-            for (let i = 0; i < toolheadCount; i++) {
-                // Try both old select elements and new custom dropdowns within this printer's container
-                const spoolSelect = printerContainer.querySelector(`select[id*="spool_"][id$="_${i}"]`);
-                const spoolHiddenInput = printerContainer.querySelector(`input[name*="spool_"][name$="_${i}"]`);
-                const spoolId = spoolSelect ? spoolSelect.value : (spoolHiddenInput ? spoolHiddenInput.value : '');
-                
-                if (spoolId) {
-                    mappings.push({
-                        toolhead_id: i,
-                        spool_id: parseInt(spoolId)
-                    });
-                    hasAnySelection = true;
-                }
-            }
+            const printerId = toolheadRow.getAttribute('data-printer-id');
+            const toolheadId = toolheadRow.getAttribute('data-toolhead-id');
             
-            if (!hasAnySelection) {
-                alert('Please select at least one spool to map');
+            // Find printer name from the printer element
+            const printerElement = document.querySelector(`[data-printer-id="${printerId}"]`);
+            if (!printerElement) {
+                console.error('Could not find printer element');
                 return;
             }
+            
+            const printerNameElement = printerElement.querySelector('h3');
+            if (!printerNameElement) {
+                console.error('Could not find printer name element');
+                return;
+            }
+            
+            const printerName = printerNameElement.textContent;
             
             // Show loading state
-            const button = event.target;
-            const originalText = button.textContent;
-            button.disabled = true;
-            button.textContent = '🗺️ Mapping...';
+            const button = dropdown.querySelector('.dropdown-button');
+            const originalContent = button.innerHTML;
+            button.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="color-swatch" style="background-color: #${selectedColor};"></div>
+                    <span>${selectedText}</span>
+                </div>
+                <span class="dropdown-arrow">⏳</span>
+            `;
             
-            // Map all selected spools
-            const promises = mappings.map(mapping => 
-                fetch('/api/map_toolhead', {
+            try {
+                const response = await fetch('/api/map_toolhead', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         printer_name: printerName,
-                        toolhead_id: mapping.toolhead_id,
-                        spool_id: mapping.spool_id
+                        toolhead_id: parseInt(toolheadId),
+                        spool_id: parseInt(selectedValue)
                     })
-                })
-            );
-            
-            Promise.all(promises)
-            .then(responses => {
-                const results = responses.map(r => r.json());
-                return Promise.all(results);
-            })
-            .then(data => {
-                const errors = data.filter(result => result.error);
-                if (errors.length > 0) {
-                    // Check for spool conflict errors specifically
-                    const conflictErrors = errors.filter(e => e.error.includes('is already assigned to'));
-                    const otherErrors = errors.filter(e => !e.error.includes('is already assigned to'));
-                    
-                    let errorMessage = '';
-                    if (conflictErrors.length > 0) {
-                        errorMessage += 'Spool assignment conflicts:\n' + conflictErrors.map(e => e.error).join('\n') + '\n\n';
-                    }
-                    if (otherErrors.length > 0) {
-                        errorMessage += 'Other errors:\n' + otherErrors.map(e => e.error).join('\n');
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    // Handle conflict errors specifically
+                    if (data.error.includes('is already assigned to')) {
+                        alert(`Spool assignment conflict: ${data.error}`);
+                    } else {
+                        alert(`Error mapping spool: ${data.error}`);
                     }
                     
-                    alert(errorMessage || 'Some mappings failed: ' + errors.map(e => e.error).join(', '));
-                } else {
-                    alert(`Successfully mapped ${mappings.length} spool(s)!`);
-                    location.reload();
+                    // Revert to previous selection
+                    button.innerHTML = originalContent;
+                    return;
                 }
-            })
-            .catch(error => {
-                alert('Error mapping spools: ' + error.message);
-            })
-            .finally(() => {
-                // Reset button state
-                button.disabled = false;
-                button.textContent = originalText;
+                
+                // Success - show brief success indicator
+                button.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="color-swatch" style="background-color: #${selectedColor};"></div>
+                        <span>${selectedText}</span>
+                    </div>
+                    <span class="dropdown-arrow">✅</span>
+                `;
+                
+                // Reset to normal state after 2 seconds
+                setTimeout(() => {
+                    button.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="color-swatch" style="background-color: #${selectedColor};"></div>
+                            <span>${selectedText}</span>
+                        </div>
+                        <span class="dropdown-arrow">▼</span>
+                    `;
+                }, 2000);
+                
+                // Immediately remove the mapped spool from all other dropdowns
+                removeSpoolFromOtherDropdowns(selectedValue);
+                
+                // Refresh all other dropdowns to update available spools
+                refreshAllDropdowns();
+                
+            } catch (error) {
+                console.error('Error mapping spool:', error);
+                alert('Error mapping spool: ' + error.message);
+                
+                // Revert to previous selection
+                button.innerHTML = originalContent;
+            }
+        }
+        
+        // Immediately remove a spool from all other dropdowns
+        function removeSpoolFromOtherDropdowns(spoolId) {
+            const allDropdowns = document.querySelectorAll('.custom-dropdown');
+            
+            allDropdowns.forEach(dropdown => {
+                const optionsContainer = dropdown.querySelector('.dropdown-options-container');
+                if (!optionsContainer) return;
+                
+                // Find and remove the option with the specified spool ID
+                const optionToRemove = optionsContainer.querySelector(`[data-value="${spoolId}"]`);
+                if (optionToRemove) {
+                    optionToRemove.remove();
+                }
             });
+        }
+        
+        // Refresh all dropdowns to update available spools
+        async function refreshAllDropdowns() {
+            // Get all dropdowns except the one that was just updated
+            const allDropdowns = document.querySelectorAll('.custom-dropdown');
+            
+            for (const dropdown of allDropdowns) {
+                // Skip if dropdown is currently open
+                const content = dropdown.querySelector('.dropdown-content');
+                if (content && content.classList.contains('show')) {
+                    continue;
+                }
+                
+                // Refresh the available spools for this dropdown
+                await loadAvailableSpools(dropdown);
+            }
         }
         
         

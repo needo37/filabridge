@@ -466,10 +466,11 @@ func (ws *WebServer) availableSpoolsHandler(c *gin.Context) {
 	assignedSpoolIDs := make(map[int]bool)
 	for _, printerMappings := range allMappings {
 		for tid, mapping := range printerMappings {
-			// Skip the current toolhead (allow re-assignment)
+			// Skip the current toolhead (allow re-assignment to the same toolhead)
 			if mapping.PrinterName == printerName && tid == toolheadID {
 				continue
 			}
+			// Mark this spool as assigned (prevents same spool being used on multiple printers)
 			assignedSpoolIDs[mapping.SpoolID] = true
 		}
 	}

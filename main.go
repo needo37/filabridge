@@ -99,6 +99,9 @@ func main() {
 		fmt.Printf("Poll interval: %v\n", config.PollInterval)
 		fmt.Printf("Web interface: http://%s:%s\n", *host, *port)
 
+		// Create web server first so we can pass it to monitoring
+		webServer := NewWebServer(bridge)
+
 		// Start bridge monitoring in a goroutine
 		go func() {
 			ticker := time.NewTicker(config.PollInterval)
@@ -106,12 +109,16 @@ func main() {
 
 			// Run initial check
 			bridge.MonitorPrinters()
+			// Broadcast initial status
+			webServer.BroadcastStatus()
 
 			// Continue monitoring
 			for {
 				select {
 				case <-ticker.C:
 					bridge.MonitorPrinters()
+					// Broadcast status after each monitoring cycle
+					webServer.BroadcastStatus()
 				case <-sigChan:
 					return
 				}
@@ -120,7 +127,6 @@ func main() {
 
 		// Start web server in a goroutine
 		go func() {
-			webServer := NewWebServer(bridge)
 			if err := webServer.Start(*port); err != nil {
 				log.Fatalf("Web server error: %v", err)
 			}

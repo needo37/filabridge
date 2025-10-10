@@ -580,7 +580,7 @@
 
                     {{range $printerID, $printerConfig := .Printers}}
                     {{$printerData := index $.Status.Printers $printerID}}
-                    <div class="printer">
+                    <div class="printer" data-printer-id="{{$printerID}}">
                         <div class="printer-header">
                             <h3>{{$printerData.Name}}</h3>
                             <span class="status {{$printerData.State}}">
@@ -600,7 +600,7 @@
                                 {{$mapping := index $.Status.ToolheadMappings $printerID}}
                                 {{range $toolheadID := generateToolheadIDs $printerConfig.Toolheads}}
                                 {{$mappedSpool := index $mapping $toolheadID}}
-                                <div class="toolhead-mapping-row" style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px;">
+                                <div class="toolhead-mapping-row" style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px;" data-printer-id="{{$printerID}}" data-toolhead-id="{{$toolheadID}}">
                                     <div class="toolhead-label" style="min-width: 100px; font-weight: bold;">Toolhead {{$toolheadID}}:</div>
                                     <div class="custom-dropdown" style="flex: 1; max-width: 300px;">
                                         <div class="dropdown-button">
@@ -1352,6 +1352,283 @@
                 }
             });
         }
+
+        // WebSocket client for real-time updates
+        let ws = null;
+        let reconnectAttempts = 0;
+        let maxReconnectAttempts = 10;
+        let reconnectDelay = 1000; // Start with 1 second
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/status`;
+            
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function(event) {
+                    console.log('WebSocket connected');
+                    reconnectAttempts = 0;
+                    reconnectDelay = 1000;
+                    updateConnectionStatus('connected');
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'status_update') {
+                            updateDashboard(data);
+                        }
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+                
+                ws.onclose = function(event) {
+                    console.log('WebSocket disconnected');
+                    updateConnectionStatus('disconnected');
+                    ws = null;
+                    
+                    // Attempt to reconnect with exponential backoff
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        setTimeout(() => {
+                            reconnectAttempts++;
+                            reconnectDelay = Math.min(reconnectDelay * 2, 30000); // Max 30 seconds
+                            console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts}) in ${reconnectDelay}ms`);
+                            connectWebSocket();
+                        }, reconnectDelay);
+                    } else {
+                        console.log('Max reconnection attempts reached');
+                        updateConnectionStatus('failed');
+                    }
+                };
+                
+                ws.onerror = function(error) {
+                    console.error('WebSocket error:', error);
+                    updateConnectionStatus('error');
+                };
+                
+            } catch (error) {
+                console.error('Failed to create WebSocket connection:', error);
+                updateConnectionStatus('error');
+            }
+        }
+
+        function updateConnectionStatus(status) {
+            // Find or create connection status indicator
+            let statusIndicator = document.getElementById('ws-status');
+            if (!statusIndicator) {
+                statusIndicator = document.createElement('div');
+                statusIndicator.id = 'ws-status';
+                statusIndicator.style.cssText = `
+                    position: fixed;
+                    top: 10px;
+                    right: 10px;
+                    padding: 8px 12px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    z-index: 1000;
+                    transition: all 0.3s ease;
+                `;
+                document.body.appendChild(statusIndicator);
+            }
+
+            switch (status) {
+                case 'connected':
+                    statusIndicator.textContent = '🟢 Live';
+                    statusIndicator.style.backgroundColor = '#28a745';
+                    statusIndicator.style.color = 'white';
+                    break;
+                case 'disconnected':
+                    statusIndicator.textContent = '🟡 Connecting...';
+                    statusIndicator.style.backgroundColor = '#ffc107';
+                    statusIndicator.style.color = 'black';
+                    break;
+                case 'error':
+                case 'failed':
+                    statusIndicator.textContent = '🔴 Offline';
+                    statusIndicator.style.backgroundColor = '#dc3545';
+                    statusIndicator.style.color = 'white';
+                    break;
+            }
+        }
+
+        function updateDashboard(data) {
+            console.log('Updating dashboard with new data:', data);
+            
+            // Update printer statuses
+            if (data.printers) {
+                updatePrinterStatuses(data.printers);
+            }
+            
+            // Update spool data
+            if (data.spools) {
+                updateSpoolData(data.spools);
+            }
+            
+            // Update toolhead mappings
+            if (data.toolhead_mappings) {
+                updateToolheadMappings(data.toolhead_mappings);
+            }
+        }
+
+        function updatePrinterStatuses(printers) {
+            Object.entries(printers).forEach(([printerId, printerData]) => {
+                if (printerId === 'no_printers') return;
+                
+                // Find the printer element
+                const printerElement = document.querySelector(`[data-printer-id="${printerId}"]`);
+                if (!printerElement) return;
+                
+                // Update status badge
+                const statusBadge = printerElement.querySelector('.status');
+                if (statusBadge) {
+                    statusBadge.className = `status ${printerData.state}`;
+                    statusBadge.textContent = printerData.state;
+                }
+            });
+        }
+
+        function updateSpoolData(spools) {
+            // Update spool dropdowns with new weight data
+            document.querySelectorAll('.custom-dropdown').forEach(dropdown => {
+                const optionsContainer = dropdown.querySelector('.dropdown-options-container');
+                if (!optionsContainer) return;
+                
+                // Clear existing options except "Select Spool"
+                const selectOption = optionsContainer.querySelector('.dropdown-option[data-value=""]');
+                optionsContainer.innerHTML = '';
+                if (selectOption) {
+                    optionsContainer.appendChild(selectOption);
+                }
+                
+                // Add updated spool options
+                spools.forEach(spool => {
+                    const option = document.createElement('div');
+                    option.className = 'dropdown-option';
+                    option.setAttribute('data-value', spool.id);
+                    option.setAttribute('data-color', spool.filament?.color_hex || '');
+                    
+                    const colorSwatch = document.createElement('div');
+                    colorSwatch.className = 'color-swatch';
+                    colorSwatch.style.backgroundColor = '#' + (spool.filament?.color_hex || 'ccc');
+                    
+                    const optionText = document.createElement('div');
+                    optionText.className = 'option-text';
+                    optionText.textContent = `${spool.material || 'Unknown Material'} - ${spool.brand || 'Unknown Brand'} - ${spool.name || 'Unnamed Spool'}${spool.remaining_weight ? ` (${Math.round(spool.remaining_weight)}g remaining)` : ''}`;
+                    
+                    option.appendChild(colorSwatch);
+                    option.appendChild(optionText);
+                    optionsContainer.appendChild(option);
+                });
+                
+                // Reinitialize dropdown functionality
+                initDropdownFunctionality(dropdown);
+            });
+        }
+
+        function updateToolheadMappings(mappings) {
+            // Update toolhead mapping displays
+            Object.entries(mappings).forEach(([printerId, printerMappings]) => {
+                Object.entries(printerMappings).forEach(([toolheadId, mapping]) => {
+                    const mappingElement = document.querySelector(`[data-printer-id="${printerId}"][data-toolhead-id="${toolheadId}"]`);
+                    if (mappingElement) {
+                        // Update mapping display if needed
+                        // This would require more complex logic to update the dropdown selections
+                        // For now, we'll just log the update
+                        console.log(`Updated mapping for printer ${printerId}, toolhead ${toolheadId}:`, mapping);
+                    }
+                });
+            });
+        }
+
+        function initDropdownFunctionality(dropdown) {
+            // Reinitialize dropdown functionality for updated dropdown
+            const button = dropdown.querySelector('.dropdown-button');
+            const content = dropdown.querySelector('.dropdown-content');
+            const arrow = dropdown.querySelector('.dropdown-arrow');
+            const searchInput = dropdown.querySelector('.dropdown-search');
+            const optionsContainer = dropdown.querySelector('.dropdown-options-container');
+            const noResults = dropdown.querySelector('.dropdown-no-results');
+            
+            if (!button || !content) return;
+            
+            // Remove existing event listeners by cloning the elements
+            const newButton = button.cloneNode(true);
+            const newContent = content.cloneNode(true);
+            button.parentNode.replaceChild(newButton, button);
+            content.parentNode.replaceChild(newContent, content);
+            
+            // Re-add event listeners
+            newButton.addEventListener('click', function(e) {
+                e.stopPropagation();
+                toggleDropdown(newButton, newContent, arrow);
+            });
+            
+            newContent.querySelectorAll('.dropdown-option').forEach(option => {
+                option.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    selectOption(option, newButton, newContent, arrow, dropdown);
+                });
+            });
+        }
+
+        function toggleDropdown(button, content, arrow) {
+            // Close other dropdowns
+            document.querySelectorAll('.custom-dropdown').forEach(other => {
+                if (other !== button.closest('.custom-dropdown')) {
+                    const otherContent = other.querySelector('.dropdown-content');
+                    const otherButton = other.querySelector('.dropdown-button');
+                    const otherArrow = other.querySelector('.dropdown-arrow');
+                    if (otherContent && otherButton) {
+                        otherContent.classList.remove('show');
+                        otherButton.classList.remove('open');
+                        if (otherArrow) otherArrow.classList.remove('open');
+                    }
+                }
+            });
+            
+            // Toggle current dropdown
+            const isOpening = !content.classList.contains('show');
+            content.classList.toggle('show');
+            button.classList.toggle('open');
+            if (arrow) arrow.classList.toggle('open');
+        }
+
+        function selectOption(option, button, content, arrow, dropdown) {
+            const selectedText = option.querySelector('.option-text').textContent;
+            const selectedColor = option.dataset.color;
+            const selectedValue = option.dataset.value;
+            
+            button.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="color-swatch" style="background-color: #${selectedColor};"></div>
+                    <span>${selectedText}</span>
+                </div>
+                <span class="dropdown-arrow">▼</span>
+            `;
+            
+            // Update hidden input value
+            const hiddenInput = dropdown.querySelector('input[type="hidden"]');
+            if (hiddenInput) {
+                hiddenInput.value = selectedValue;
+            }
+            
+            // Update selected state
+            content.querySelectorAll('.dropdown-option').forEach(opt => opt.classList.remove('selected'));
+            option.classList.add('selected');
+            
+            // Close dropdown
+            content.classList.remove('show');
+            button.classList.remove('open');
+            if (arrow) arrow.classList.remove('open');
+        }
+
+        // Initialize WebSocket connection when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            connectWebSocket();
+        });
     </script>
 </body>
 </html>

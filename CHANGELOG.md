@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [v0.0.6] - 2025-10-10
+
+[Full Changelog](https://github.com/needo37/filabridge/compare/v0.0.5...v0.0.6)
+
+
+
+
 ## [v0.0.5] - 2025-10-10
 
 [Full Changelog](https://github.com/needo37/filabridge/compare/v0.0.4...v0.0.5)

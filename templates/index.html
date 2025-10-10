@@ -172,6 +172,48 @@
         .dropdown-arrow.open {
             transform: rotate(180deg);
         }
+        
+        /* Search functionality styles */
+        .dropdown-search-container {
+            padding: 10px 12px;
+            border-bottom: 1px solid #555;
+            background: #3a3a3a;
+        }
+        
+        .dropdown-search {
+            width: 100%;
+            padding: 8px 12px;
+            background: #2a2a2a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s ease;
+            box-sizing: border-box;
+        }
+        
+        .dropdown-search:focus {
+            border-color: #007bff;
+            background: #333;
+        }
+        
+        .dropdown-search::placeholder {
+            color: #999;
+        }
+        
+        .dropdown-options-container {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .dropdown-no-results {
+            padding: 15px;
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            display: none;
+        }
         .btn-secondary {
             background: #6c757d;
         }
@@ -578,16 +620,22 @@
                                             <span class="dropdown-arrow">▼</span>
                                         </div>
                                         <div class="dropdown-content">
-                                            <div class="dropdown-option" data-value="" data-color="">
-                                                <div class="color-swatch" style="background-color: #ccc;"></div>
-                                                <div class="option-text">Select Spool</div>
+                                            <div class="dropdown-search-container">
+                                                <input type="text" class="dropdown-search" placeholder="Search spools..." autocomplete="off">
                                             </div>
-                                            {{range $.Spools}}
-                                            <div class="dropdown-option" data-value="{{.ID}}" data-color="{{.Filament.ColorHex}}" {{if $mappedSpool.SpoolID}}{{if eq .ID $mappedSpool.SpoolID}}class="selected"{{end}}{{end}}>
-                                                <div class="color-swatch" data-color="{{.Filament.ColorHex}}"></div>
-                                                <div class="option-text">{{if .Material}}{{.Material}}{{else}}Unknown Material{{end}} - {{if .Brand}}{{.Brand}}{{else}}Unknown Brand{{end}} - {{if .Name}}{{.Name}}{{else}}Unnamed Spool{{end}}{{if .RemainingWeight}} ({{printf "%.0f" .RemainingWeight}}g remaining){{end}}</div>
+                                            <div class="dropdown-options-container">
+                                                <div class="dropdown-option" data-value="" data-color="">
+                                                    <div class="color-swatch" style="background-color: #ccc;"></div>
+                                                    <div class="option-text">Select Spool</div>
+                                                </div>
+                                                {{range $.Spools}}
+                                                <div class="dropdown-option" data-value="{{.ID}}" data-color="{{.Filament.ColorHex}}" {{if $mappedSpool.SpoolID}}{{if eq .ID $mappedSpool.SpoolID}}class="selected"{{end}}{{end}}>
+                                                    <div class="color-swatch" data-color="{{.Filament.ColorHex}}"></div>
+                                                    <div class="option-text">{{if .Material}}{{.Material}}{{else}}Unknown Material{{end}} - {{if .Brand}}{{.Brand}}{{else}}Unknown Brand{{end}} - {{if .Name}}{{.Name}}{{else}}Unnamed Spool{{end}}{{if .RemainingWeight}} ({{printf "%.0f" .RemainingWeight}}g remaining){{end}}</div>
+                                                </div>
+                                                {{end}}
+                                                <div class="dropdown-no-results">No spools found</div>
                                             </div>
-                                            {{end}}
                                         </div>
                                         <input type="hidden" name="spool_{{$printerID}}_{{$toolheadID}}" value="{{if $mappedSpool.SpoolID}}{{$mappedSpool.SpoolID}}{{end}}">
                                     </div>
@@ -725,6 +773,37 @@
                 const button = dropdown.querySelector('.dropdown-button');
                 const content = dropdown.querySelector('.dropdown-content');
                 const arrow = dropdown.querySelector('.dropdown-arrow');
+                const searchInput = dropdown.querySelector('.dropdown-search');
+                const optionsContainer = dropdown.querySelector('.dropdown-options-container');
+                const noResults = dropdown.querySelector('.dropdown-no-results');
+                
+                // Initialize search functionality
+                if (searchInput) {
+                    searchInput.addEventListener('input', (e) => {
+                        const searchTerm = e.target.value.toLowerCase().trim();
+                        const options = optionsContainer.querySelectorAll('.dropdown-option');
+                        let visibleCount = 0;
+                        
+                        options.forEach(option => {
+                            const optionText = option.querySelector('.option-text').textContent.toLowerCase();
+                            const isMatch = searchTerm === '' || optionText.includes(searchTerm);
+                            
+                            if (isMatch) {
+                                option.style.display = 'flex';
+                                visibleCount++;
+                            } else {
+                                option.style.display = 'none';
+                            }
+                        });
+                        
+                        // Show/hide "No results" message
+                        if (visibleCount === 0 && searchTerm !== '') {
+                            noResults.style.display = 'block';
+                        } else {
+                            noResults.style.display = 'none';
+                        }
+                    });
+                }
                 
                 button.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -735,13 +814,27 @@
                             other.querySelector('.dropdown-content').classList.remove('show');
                             other.querySelector('.dropdown-button').classList.remove('open');
                             other.querySelector('.dropdown-arrow').classList.remove('open');
+                            // Clear search in other dropdowns
+                            const otherSearch = other.querySelector('.dropdown-search');
+                            if (otherSearch) {
+                                otherSearch.value = '';
+                                otherSearch.dispatchEvent(new Event('input'));
+                            }
                         }
                     });
                     
                     // Toggle current dropdown
+                    const isOpening = !content.classList.contains('show');
                     content.classList.toggle('show');
                     button.classList.toggle('open');
                     arrow.classList.toggle('open');
+                    
+                    // Focus search input when opening dropdown
+                    if (isOpening && searchInput) {
+                        setTimeout(() => {
+                            searchInput.focus();
+                        }, 10);
+                    }
                 });
                 
                 // Handle option selection
@@ -792,6 +885,12 @@
                     dropdown.querySelector('.dropdown-content').classList.remove('show');
                     dropdown.querySelector('.dropdown-button').classList.remove('open');
                     dropdown.querySelector('.dropdown-arrow').classList.remove('open');
+                    // Clear search when closing dropdown
+                    const searchInput = dropdown.querySelector('.dropdown-search');
+                    if (searchInput) {
+                        searchInput.value = '';
+                        searchInput.dispatchEvent(new Event('input'));
+                    }
                 });
             });
         }

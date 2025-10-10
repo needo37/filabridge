@@ -409,7 +409,7 @@ func (ws *WebServer) mapToolheadHandler(c *gin.Context) {
 		return
 	}
 
-	if req.PrinterName == "" || req.SpoolID == 0 {
+	if req.PrinterName == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required parameters"})
 		return
 	}
@@ -419,17 +419,27 @@ func (ws *WebServer) mapToolheadHandler(c *gin.Context) {
 		return
 	}
 
-	if err := ws.bridge.SetToolheadMapping(req.PrinterName, req.ToolheadID, req.SpoolID); err != nil {
-		// Check if this is a spool conflict error
-		if strings.Contains(err.Error(), "is already assigned to") {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		} else {
+	// Handle unmapping (SpoolID = 0) or mapping (SpoolID > 0)
+	if req.SpoolID == 0 {
+		// Unmap the toolhead
+		if err := ws.bridge.UnmapToolhead(req.PrinterName, req.ToolheadID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
-		return
+		c.JSON(http.StatusOK, gin.H{"message": "Toolhead unmapped successfully"})
+	} else {
+		// Map the spool to the toolhead
+		if err := ws.bridge.SetToolheadMapping(req.PrinterName, req.ToolheadID, req.SpoolID); err != nil {
+			// Check if this is a spool conflict error
+			if strings.Contains(err.Error(), "is already assigned to") {
+				c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Toolhead mapped successfully"})
 	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Toolhead mapped successfully"})
 }
 
 // availableSpoolsHandler returns spools available for assignment to a specific toolhead
@@ -609,20 +619,20 @@ func (ws *WebServer) updatePrinterHandler(c *gin.Context) {
 	// Auto-detect model if IP address or API key changed, or if model is currently "Unknown"
 	if printerConfig.Model == "" || printerConfig.Model == ModelUnknown {
 		log.Printf("🔍 [Auto-Detection] Detecting model for printer %s (IP: %s)", printerID, printerConfig.IPAddress)
-		
+
 		// Create PrusaLink client for detection
 		client := NewPrusaLinkClient(printerConfig.IPAddress, printerConfig.APIKey)
-		
+
 		// Try to get printer info
 		printerInfo, err := client.GetPrinterInfo()
 		if err != nil {
-			log.Printf("⚠️ [Auto-Detection] Failed to detect model for %s: %v (keeping current model: %s)", 
+			log.Printf("⚠️ [Auto-Detection] Failed to detect model for %s: %v (keeping current model: %s)",
 				printerConfig.IPAddress, err, printerConfig.Model)
 		} else {
 			// Determine model based on hostname (same logic as detectPrinterHandler)
 			hostname := strings.ToLower(printerInfo.Hostname)
 			hostname = strings.TrimSpace(hostname)
-			
+
 			detectedModel := ModelUnknown
 			if strings.Contains(hostname, ModelCorePattern) {
 				detectedModel = ModelCoreOne
@@ -635,13 +645,13 @@ func (ws *WebServer) updatePrinterHandler(c *gin.Context) {
 			} else if strings.Contains(hostname, ModelMiniPattern) {
 				detectedModel = ModelMiniPlus
 			}
-			
+
 			if detectedModel != ModelUnknown {
-				log.Printf("✅ [Auto-Detection] Detected model for %s: '%s' -> %s", 
+				log.Printf("✅ [Auto-Detection] Detected model for %s: '%s' -> %s",
 					printerConfig.IPAddress, printerInfo.Hostname, detectedModel)
 				printerConfig.Model = detectedModel
 			} else {
-				log.Printf("❌ [Auto-Detection] No pattern matched for hostname '%s' from %s", 
+				log.Printf("❌ [Auto-Detection] No pattern matched for hostname '%s' from %s",
 					printerInfo.Hostname, printerConfig.IPAddress)
 			}
 		}
@@ -748,7 +758,7 @@ func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 		model = ModelMiniPlus
 		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelMiniPattern, model)
 	} else {
-		log.Printf("❌ [Detection] No pattern matched for hostname '%s'. Available patterns: %s, %s, %s, %s, %s", 
+		log.Printf("❌ [Detection] No pattern matched for hostname '%s'. Available patterns: %s, %s, %s, %s, %s",
 			hostname, ModelCorePattern, ModelXLPattern, ModelMK4Pattern, ModelMK3Pattern, ModelMiniPattern)
 	}
 

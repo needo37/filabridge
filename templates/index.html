@@ -613,7 +613,7 @@
                                                 {{end}}
                                                 {{else}}
                                                 <div class="color-swatch" style="background-color: #ccc;"></div>
-                                                <span>Select Spool</span>
+                                                <span>Empty</span>
                                                 {{end}}
                                             </div>
                                             <span class="dropdown-arrow">▼</span>
@@ -625,7 +625,7 @@
                                             <div class="dropdown-options-container">
                                                 <div class="dropdown-option" data-value="" data-color="">
                                                     <div class="color-swatch" style="background-color: #ccc;"></div>
-                                                    <div class="option-text">Select Spool</div>
+                                                    <div class="option-text">Empty</div>
                                                 </div>
                                                 {{range $.Spools}}
                                                 <div class="dropdown-option" data-value="{{.ID}}" data-color="{{.Filament.ColorHex}}" {{if $mappedSpool.SpoolID}}{{if eq .ID $mappedSpool.SpoolID}}class="selected"{{end}}{{end}}>
@@ -800,7 +800,7 @@
                 const optionsContainer = dropdown.querySelector('.dropdown-options-container');
                 if (!optionsContainer) return;
                 
-                // Clear existing options except "Select Spool"
+                // Clear existing options except "Empty"
                 const selectOption = optionsContainer.querySelector('.dropdown-option[data-value=""]');
                 optionsContainer.innerHTML = '';
                 if (selectOption) {
@@ -858,9 +858,12 @@
                         button.classList.remove('open');
                         arrow.classList.remove('open');
                         
-                        // Auto-map the spool if a spool is selected (not "Select Spool")
+                        // Auto-map the spool if a spool is selected (not "Empty")
                         if (selectedValue && selectedValue !== '') {
                             await autoMapSpool(dropdown, selectedValue, selectedText, selectedColor);
+                        } else {
+                            // Handle empty selection - unmap the toolhead
+                            await autoMapSpool(dropdown, '0', selectedText, '');
                         }
                     });
                 });
@@ -934,9 +937,12 @@
                         button.classList.remove('open');
                         arrow.classList.remove('open');
                         
-                        // Auto-map the spool if a spool is selected (not "Select Spool")
+                        // Auto-map the spool if a spool is selected (not "Empty")
                         if (selectedValue && selectedValue !== '') {
                             await autoMapSpool(dropdown, selectedValue, selectedText, selectedColor);
+                        } else {
+                            // Handle empty selection - unmap the toolhead
+                            await autoMapSpool(dropdown, '0', selectedText, '');
                         }
                     });
                 });
@@ -1102,7 +1108,7 @@
                     body: JSON.stringify({
                         printer_name: printerName,
                         toolhead_id: parseInt(toolheadId),
-                        spool_id: parseInt(selectedValue)
+                        spool_id: selectedValue === '0' ? 0 : parseInt(selectedValue)
                     })
                 });
                 
@@ -1141,11 +1147,17 @@
                     `;
                 }, 2000);
                 
-                // Immediately remove the mapped spool from all other dropdowns
-                removeSpoolFromOtherDropdowns(selectedValue);
-                
-                // Refresh all other dropdowns to update available spools
-                refreshAllDropdowns();
+                // Only remove spools from other dropdowns if we're mapping a spool (not unmapping)
+                if (selectedValue !== '0') {
+                    // Immediately remove the mapped spool from all other dropdowns
+                    removeSpoolFromOtherDropdowns(selectedValue);
+                    
+                    // Refresh all other dropdowns to update available spools
+                    refreshAllDropdowns();
+                } else {
+                    // If unmapping, just refresh all dropdowns to show the newly available spool
+                    refreshAllDropdowns();
+                }
                 
             } catch (error) {
                 console.error('Error mapping spool:', error);
@@ -1653,7 +1665,7 @@
                 const optionsContainer = dropdown.querySelector('.dropdown-options-container');
                 if (!optionsContainer) return;
                 
-                // Clear existing options except "Select Spool"
+                // Clear existing options except "Empty"
                 const selectOption = optionsContainer.querySelector('.dropdown-option[data-value=""]');
                 optionsContainer.innerHTML = '';
                 if (selectOption) {
@@ -1680,8 +1692,43 @@
                     optionsContainer.appendChild(option);
                 });
                 
-                // Reinitialize dropdown functionality
-                initDropdownFunctionality(dropdown);
+                // Add event listeners to the new options
+                optionsContainer.querySelectorAll('.dropdown-option').forEach(option => {
+                    option.addEventListener('click', async function(e) {
+                        e.stopPropagation();
+                        
+                        // Update button text and selected state
+                        const selectedText = option.querySelector('.option-text').textContent;
+                        const selectedColor = option.dataset.color;
+                        const selectedValue = option.dataset.value;
+                        
+                        // Update hidden input value
+                        const hiddenInput = dropdown.querySelector('input[type="hidden"]');
+                        if (hiddenInput) {
+                            hiddenInput.value = selectedValue;
+                        }
+                        
+                        // Update selected state
+                        optionsContainer.querySelectorAll('.dropdown-option').forEach(opt => opt.classList.remove('selected'));
+                        option.classList.add('selected');
+                        
+                        // Close dropdown
+                        const content = dropdown.querySelector('.dropdown-content');
+                        const button = dropdown.querySelector('.dropdown-button');
+                        const arrow = dropdown.querySelector('.dropdown-arrow');
+                        content.classList.remove('show');
+                        button.classList.remove('open');
+                        arrow.classList.remove('open');
+                        
+                        // Auto-map the spool if a spool is selected (not "Empty")
+                        if (selectedValue && selectedValue !== '') {
+                            await autoMapSpool(dropdown, selectedValue, selectedText, selectedColor);
+                        } else {
+                            // Handle empty selection - unmap the toolhead
+                            await autoMapSpool(dropdown, '0', selectedText, '');
+                        }
+                    });
+                });
             });
         }
 
@@ -1711,22 +1758,117 @@
             
             if (!button || !content) return;
             
-            // Remove existing event listeners by cloning the elements
+            // Remove all existing event listeners by cloning the elements
             const newButton = button.cloneNode(true);
             const newContent = content.cloneNode(true);
             button.parentNode.replaceChild(newButton, button);
             content.parentNode.replaceChild(newContent, content);
             
-            // Re-add event listeners
-            newButton.addEventListener('click', function(e) {
+            // Update references to the new elements
+            const updatedButton = dropdown.querySelector('.dropdown-button');
+            const updatedContent = dropdown.querySelector('.dropdown-content');
+            const updatedSearchInput = dropdown.querySelector('.dropdown-search');
+            const updatedOptionsContainer = dropdown.querySelector('.dropdown-options-container');
+            const updatedNoResults = dropdown.querySelector('.dropdown-no-results');
+            
+            // Add click handler for dropdown button
+            updatedButton.addEventListener('click', async function(e) {
                 e.stopPropagation();
-                toggleDropdown(newButton, newContent, arrow);
+                
+                // Close other dropdowns
+                document.querySelectorAll('.custom-dropdown').forEach(other => {
+                    if (other !== dropdown) {
+                        other.querySelector('.dropdown-content').classList.remove('show');
+                        other.querySelector('.dropdown-button').classList.remove('open');
+                        other.querySelector('.dropdown-arrow').classList.remove('open');
+                        // Clear search in other dropdowns
+                        const otherSearch = other.querySelector('.dropdown-search');
+                        if (otherSearch) {
+                            otherSearch.value = '';
+                            otherSearch.dispatchEvent(new Event('input'));
+                        }
+                    }
+                });
+                
+                // Toggle current dropdown
+                const isOpening = !updatedContent.classList.contains('show');
+                updatedContent.classList.toggle('show');
+                updatedButton.classList.toggle('open');
+                arrow.classList.toggle('open');
+                
+                // Load available spools when opening dropdown
+                if (isOpening) {
+                    await loadAvailableSpools(dropdown);
+                    
+                    // Focus search input when opening dropdown
+                    if (updatedSearchInput) {
+                        setTimeout(() => {
+                            updatedSearchInput.focus();
+                        }, 10);
+                    }
+                }
             });
             
-            newContent.querySelectorAll('.dropdown-option').forEach(option => {
-                option.addEventListener('click', function(e) {
+            // Initialize search functionality
+            if (updatedSearchInput) {
+                updatedSearchInput.addEventListener('input', (e) => {
+                    const searchTerm = e.target.value.toLowerCase().trim();
+                    const options = updatedOptionsContainer.querySelectorAll('.dropdown-option');
+                    let visibleCount = 0;
+                    
+                    options.forEach(option => {
+                        const optionText = option.querySelector('.option-text').textContent.toLowerCase();
+                        const isMatch = searchTerm === '' || optionText.includes(searchTerm);
+                        
+                        if (isMatch) {
+                            option.style.display = 'flex';
+                            visibleCount++;
+                        } else {
+                            option.style.display = 'none';
+                        }
+                    });
+                    
+                    // Show/hide "No results" message
+                    if (visibleCount === 0 && searchTerm !== '') {
+                        updatedNoResults.style.display = 'block';
+                    } else {
+                        updatedNoResults.style.display = 'none';
+                    }
+                });
+            }
+            
+            // Handle option selection with proper API calls
+            updatedOptionsContainer.querySelectorAll('.dropdown-option').forEach(option => {
+                option.addEventListener('click', async function(e) {
                     e.stopPropagation();
-                    selectOption(option, newButton, newContent, arrow, dropdown);
+                    
+                    // Update button text and selected state
+                    const selectedText = option.querySelector('.option-text').textContent;
+                    const selectedColor = option.dataset.color;
+                    const selectedValue = option.dataset.value;
+                    
+                    // Update hidden input value
+                    const hiddenInput = dropdown.querySelector('input[type="hidden"]');
+                    if (hiddenInput) {
+                        hiddenInput.value = selectedValue;
+                    }
+                    
+                    // Update selected state
+                    updatedOptionsContainer.querySelectorAll('.dropdown-option').forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                    
+                    // Close dropdown
+                    updatedContent.classList.remove('show');
+                    updatedButton.classList.remove('open');
+                    arrow.classList.remove('open');
+                    
+                    // Auto-map the spool if a spool is selected (not "Empty")
+                    if (selectedValue && selectedValue !== '') {
+                        await autoMapSpool(dropdown, selectedValue, selectedText, selectedColor);
+                    } else {
+                        // Handle empty selection - unmap the toolhead
+                        await autoMapSpool(dropdown, '0', selectedText, '');
+                    }
                 });
             });
         }

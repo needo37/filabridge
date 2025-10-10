@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -106,6 +107,7 @@ func (ws *WebServer) setupRoutes() {
 		api.GET("/status", ws.statusHandler)
 		api.GET("/spools", ws.spoolsHandler)
 		api.POST("/map_toolhead", ws.mapToolheadHandler)
+		api.GET("/available_spools", ws.availableSpoolsHandler)
 		api.GET("/spoolman/test", ws.testSpoolmanConnectionHandler)
 		api.GET("/spoolman/debug", ws.debugSpoolmanHandler)
 		api.POST("/test/print_complete", ws.testPrintCompleteHandler)
@@ -418,11 +420,69 @@ func (ws *WebServer) mapToolheadHandler(c *gin.Context) {
 	}
 
 	if err := ws.bridge.SetToolheadMapping(req.PrinterName, req.ToolheadID, req.SpoolID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Check if this is a spool conflict error
+		if strings.Contains(err.Error(), "is already assigned to") {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Toolhead mapped successfully"})
+}
+
+// availableSpoolsHandler returns spools available for assignment to a specific toolhead
+func (ws *WebServer) availableSpoolsHandler(c *gin.Context) {
+	printerName := c.Query("printer_name")
+	toolheadIDStr := c.Query("toolhead_id")
+
+	if printerName == "" || toolheadIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "printer_name and toolhead_id parameters are required"})
+		return
+	}
+
+	toolheadID, err := strconv.Atoi(toolheadIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid toolhead_id"})
+		return
+	}
+
+	// Get all spools from Spoolman
+	allSpools, err := ws.bridge.spoolman.GetAllSpools()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get all current toolhead mappings
+	allMappings, err := ws.bridge.GetAllToolheadMappings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Create a set of assigned spool IDs (excluding the current toolhead)
+	assignedSpoolIDs := make(map[int]bool)
+	for _, printerMappings := range allMappings {
+		for tid, mapping := range printerMappings {
+			// Skip the current toolhead (allow re-assignment)
+			if mapping.PrinterName == printerName && tid == toolheadID {
+				continue
+			}
+			assignedSpoolIDs[mapping.SpoolID] = true
+		}
+	}
+
+	// Filter out assigned spools
+	var availableSpools []SpoolmanSpool
+	for _, spool := range allSpools {
+		if !assignedSpoolIDs[spool.ID] {
+			availableSpools = append(availableSpools, spool)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"spools": availableSpools})
 }
 
 // getConfigHandler returns current configuration

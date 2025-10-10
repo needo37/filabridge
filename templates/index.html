@@ -767,6 +767,119 @@
     </div>
 
     <script>
+        // Load available spools for a specific dropdown
+        async function loadAvailableSpools(dropdown) {
+            const toolheadRow = dropdown.closest('.toolhead-mapping-row');
+            if (!toolheadRow) return;
+            
+            const printerId = toolheadRow.getAttribute('data-printer-id');
+            const toolheadId = toolheadRow.getAttribute('data-toolhead-id');
+            
+            // Find printer name from the printer element
+            const printerElement = document.querySelector(`[data-printer-id="${printerId}"]`);
+            if (!printerElement) return;
+            
+            const printerNameElement = printerElement.querySelector('h3');
+            if (!printerNameElement) return;
+            
+            const printerName = printerNameElement.textContent;
+            
+            try {
+                const response = await fetch(`/api/available_spools?printer_name=${encodeURIComponent(printerName)}&toolhead_id=${toolheadId}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    console.error('Error loading available spools:', data.error);
+                    return;
+                }
+                
+                // Get current selection
+                const hiddenInput = dropdown.querySelector('input[type="hidden"]');
+                const currentSpoolId = hiddenInput ? hiddenInput.value : '';
+                
+                // Update dropdown options
+                const optionsContainer = dropdown.querySelector('.dropdown-options-container');
+                if (!optionsContainer) return;
+                
+                // Clear existing options except "Select Spool"
+                const selectOption = optionsContainer.querySelector('.dropdown-option[data-value=""]');
+                optionsContainer.innerHTML = '';
+                if (selectOption) {
+                    optionsContainer.appendChild(selectOption);
+                }
+                
+                // Add available spools
+                data.spools.forEach(spool => {
+                    const option = document.createElement('div');
+                    option.className = 'dropdown-option';
+                    option.setAttribute('data-value', spool.id);
+                    option.setAttribute('data-color', spool.filament?.color_hex || '');
+                    
+                    if (currentSpoolId && spool.id.toString() === currentSpoolId) {
+                        option.classList.add('selected');
+                    }
+                    
+                    const colorSwatch = document.createElement('div');
+                    colorSwatch.className = 'color-swatch';
+                    colorSwatch.style.backgroundColor = '#' + (spool.filament?.color_hex || 'ccc');
+                    
+                    const optionText = document.createElement('div');
+                    optionText.className = 'option-text';
+                    optionText.textContent = `${spool.material || 'Unknown Material'} - ${spool.brand || 'Unknown Brand'} - ${spool.name || 'Unnamed Spool'}${spool.remaining_weight ? ` (${Math.round(spool.remaining_weight)}g remaining)` : ''}`;
+                    
+                    option.appendChild(colorSwatch);
+                    option.appendChild(optionText);
+                    optionsContainer.appendChild(option);
+                });
+                
+                // Re-add click handlers for new options
+                optionsContainer.querySelectorAll('.dropdown-option').forEach(option => {
+                    option.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        
+                        // Update button text and selected state
+                        const selectedText = option.querySelector('.option-text').textContent;
+                        const selectedColor = option.dataset.color;
+                        const selectedValue = option.dataset.value;
+                        
+                        const button = dropdown.querySelector('.dropdown-button');
+                        button.innerHTML = `
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="color-swatch" data-color="${selectedColor}"></div>
+                                <span>${selectedText}</span>
+                            </div>
+                            <span class="dropdown-arrow">▼</span>
+                        `;
+                        
+                        // Set the background color for the selected swatch
+                        const selectedSwatch = button.querySelector('.color-swatch');
+                        if (selectedSwatch && selectedColor) {
+                            selectedSwatch.style.backgroundColor = '#' + selectedColor;
+                        }
+                        
+                        // Update hidden input value
+                        if (hiddenInput) {
+                            hiddenInput.value = selectedValue;
+                        }
+                        
+                        // Update selected state
+                        optionsContainer.querySelectorAll('.dropdown-option').forEach(opt => opt.classList.remove('selected'));
+                        option.classList.add('selected');
+                        
+                        // Close dropdown
+                        const content = dropdown.querySelector('.dropdown-content');
+                        const arrow = dropdown.querySelector('.dropdown-arrow');
+                        content.classList.remove('show');
+                        button.classList.remove('open');
+                        arrow.classList.remove('open');
+                    });
+                });
+                
+            } catch (error) {
+                console.error('Error loading available spools:', error);
+            }
+        }
+
         // Custom dropdown functionality
         function initCustomDropdowns() {
             document.querySelectorAll('.custom-dropdown').forEach(dropdown => {
@@ -805,37 +918,6 @@
                     });
                 }
                 
-                button.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    
-                    // Close other dropdowns
-                    document.querySelectorAll('.custom-dropdown').forEach(other => {
-                        if (other !== dropdown) {
-                            other.querySelector('.dropdown-content').classList.remove('show');
-                            other.querySelector('.dropdown-button').classList.remove('open');
-                            other.querySelector('.dropdown-arrow').classList.remove('open');
-                            // Clear search in other dropdowns
-                            const otherSearch = other.querySelector('.dropdown-search');
-                            if (otherSearch) {
-                                otherSearch.value = '';
-                                otherSearch.dispatchEvent(new Event('input'));
-                            }
-                        }
-                    });
-                    
-                    // Toggle current dropdown
-                    const isOpening = !content.classList.contains('show');
-                    content.classList.toggle('show');
-                    button.classList.toggle('open');
-                    arrow.classList.toggle('open');
-                    
-                    // Focus search input when opening dropdown
-                    if (isOpening && searchInput) {
-                        setTimeout(() => {
-                            searchInput.focus();
-                        }, 10);
-                    }
-                });
                 
                 // Handle option selection
                 content.querySelectorAll('.dropdown-option').forEach(option => {
@@ -876,6 +958,44 @@
                         button.classList.remove('open');
                         arrow.classList.remove('open');
                     });
+                });
+                
+                // Load available spools when dropdown is opened
+                button.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    
+                    // Close other dropdowns
+                    document.querySelectorAll('.custom-dropdown').forEach(other => {
+                        if (other !== dropdown) {
+                            other.querySelector('.dropdown-content').classList.remove('show');
+                            other.querySelector('.dropdown-button').classList.remove('open');
+                            other.querySelector('.dropdown-arrow').classList.remove('open');
+                            // Clear search in other dropdowns
+                            const otherSearch = other.querySelector('.dropdown-search');
+                            if (otherSearch) {
+                                otherSearch.value = '';
+                                otherSearch.dispatchEvent(new Event('input'));
+                            }
+                        }
+                    });
+                    
+                    // Toggle current dropdown
+                    const isOpening = !content.classList.contains('show');
+                    content.classList.toggle('show');
+                    button.classList.toggle('open');
+                    arrow.classList.toggle('open');
+                    
+                    // Load available spools when opening dropdown
+                    if (isOpening) {
+                        await loadAvailableSpools(dropdown);
+                        
+                        // Focus search input when opening dropdown
+                        if (searchInput) {
+                            setTimeout(() => {
+                                searchInput.focus();
+                            }, 10);
+                        }
+                    }
                 });
             });
             
@@ -1016,7 +1136,19 @@
             .then(data => {
                 const errors = data.filter(result => result.error);
                 if (errors.length > 0) {
-                    alert('Some mappings failed: ' + errors.map(e => e.error).join(', '));
+                    // Check for spool conflict errors specifically
+                    const conflictErrors = errors.filter(e => e.error.includes('is already assigned to'));
+                    const otherErrors = errors.filter(e => !e.error.includes('is already assigned to'));
+                    
+                    let errorMessage = '';
+                    if (conflictErrors.length > 0) {
+                        errorMessage += 'Spool assignment conflicts:\n' + conflictErrors.map(e => e.error).join('\n') + '\n\n';
+                    }
+                    if (otherErrors.length > 0) {
+                        errorMessage += 'Other errors:\n' + otherErrors.map(e => e.error).join('\n');
+                    }
+                    
+                    alert(errorMessage || 'Some mappings failed: ' + errors.map(e => e.error).join(', '));
                 } else {
                     alert(`Successfully mapped ${mappings.length} spool(s)!`);
                     location.reload();

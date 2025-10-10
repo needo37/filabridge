@@ -383,7 +383,27 @@ func (b *FilamentBridge) SetToolheadMapping(printerName string, toolheadID int, 
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	_, err := b.db.Exec(
+	// Check if this spool is already assigned to a different toolhead
+	rows, err := b.db.Query(
+		"SELECT printer_name, toolhead_id FROM toolhead_mappings WHERE spool_id = ? AND NOT (printer_name = ? AND toolhead_id = ?)",
+		spoolID, printerName, toolheadID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to check existing spool assignments: %w", err)
+	}
+	defer rows.Close()
+
+	// If we find any rows, this spool is already assigned elsewhere
+	if rows.Next() {
+		var existingPrinterName string
+		var existingToolheadID int
+		if err := rows.Scan(&existingPrinterName, &existingToolheadID); err != nil {
+			return fmt.Errorf("failed to scan existing assignment: %w", err)
+		}
+		return fmt.Errorf("spool %d is already assigned to %s toolhead %d", spoolID, existingPrinterName, existingToolheadID)
+	}
+
+	_, err = b.db.Exec(
 		"INSERT OR REPLACE INTO toolhead_mappings (printer_name, toolhead_id, spool_id, mapped_at) VALUES (?, ?, ?, ?)",
 		printerName, toolheadID, spoolID, time.Now(),
 	)
@@ -414,6 +434,40 @@ func (b *FilamentBridge) GetToolheadMappings(printerName string) (map[int]Toolhe
 			return nil, err
 		}
 		mappings[toolheadID] = ToolheadMapping{
+			PrinterName: printerName,
+			ToolheadID:  toolheadID,
+			SpoolID:     spoolID,
+			MappedAt:    mappedAt,
+		}
+	}
+
+	return mappings, nil
+}
+
+// GetAllToolheadMappings gets all toolhead mappings across all printers
+func (b *FilamentBridge) GetAllToolheadMappings() (map[string]map[int]ToolheadMapping, error) {
+	rows, err := b.db.Query(
+		"SELECT printer_name, toolhead_id, spool_id, mapped_at FROM toolhead_mappings ORDER BY printer_name, toolhead_id",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	mappings := make(map[string]map[int]ToolheadMapping)
+	for rows.Next() {
+		var printerName string
+		var toolheadID, spoolID int
+		var mappedAt time.Time
+		if err := rows.Scan(&printerName, &toolheadID, &spoolID, &mappedAt); err != nil {
+			return nil, err
+		}
+
+		if mappings[printerName] == nil {
+			mappings[printerName] = make(map[int]ToolheadMapping)
+		}
+
+		mappings[printerName][toolheadID] = ToolheadMapping{
 			PrinterName: printerName,
 			ToolheadID:  toolheadID,
 			SpoolID:     spoolID,

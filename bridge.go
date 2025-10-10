@@ -292,13 +292,13 @@ func (b *FilamentBridge) ReloadConfig() error {
 // IsFirstRun checks if this is the first time the application is running
 func (b *FilamentBridge) IsFirstRun() (bool, error) {
 	var count int
-	err := b.db.QueryRow("SELECT COUNT(*) FROM configuration WHERE key = 'printer_ips' AND (value = '' OR value IS NULL)").Scan(&count)
+	err := b.db.QueryRow("SELECT COUNT(*) FROM printer_configs").Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check first run status: %w", err)
 	}
 
-	// If no printer IPs are configured, this is likely a first run
-	return count > 0, nil
+	// If no printers are configured, this is a first run
+	return count == 0, nil
 }
 
 // UpdateConfig updates the bridge configuration

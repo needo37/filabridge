@@ -84,16 +84,68 @@ jobs:
 
       - name: Install git-chglog
         run: |
-          curl -sSL https://git.io/git-chglog | bash -s -- -b /usr/local/bin
+          # Download the latest release directly
+          echo "Downloading git-chglog..."
+          wget -O git-chglog.tar.gz https://github.com/git-chglog/git-chglog/releases/download/v0.15.4/git-chglog_0.15.4_linux_amd64.tar.gz
+          
+          # Extract and install
+          echo "Extracting git-chglog..."
+          tar -xzf git-chglog.tar.gz
+          
+          # Install to system path
+          echo "Installing git-chglog..."
+          sudo mv git-chglog /usr/local/bin/
+          sudo chmod +x /usr/local/bin/git-chglog
+          
+          # Verify installation
+          echo "Verifying installation..."
           git-chglog --version
+          
+          # Clean up
+          rm -f git-chglog.tar.gz
 
       - name: Generate changelog
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           echo "Generating changelog for version: $VERSION"
           
+          # Check if git-chglog is available
+          which git-chglog
+          git-chglog --version
+          
           # Generate changelog for this version only
-          git-chglog --output CHANGELOG.md --next-tag $VERSION
+          if git-chglog --output CHANGELOG.md --next-tag $VERSION; then
+            echo "git-chglog succeeded"
+          else
+            echo "git-chglog failed, falling back to manual generation"
+            # Fallback: generate from git commits since last tag
+            LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            if [ -z "$LAST_TAG" ]; then
+              COMMITS=$(git log --pretty=format:"- %s" HEAD)
+            else
+              COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
+            fi
+            
+            # Create a simple changelog entry
+            cat > CHANGELOG.md << 'EOF'
+          # Changelog
+          
+          All notable changes to FilaBridge will be documented in this file.
+          
+          The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+          and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+          
+          ## [VERSION_PLACEHOLDER] - DATE_PLACEHOLDER
+          
+          ### Added
+          COMMITS_PLACEHOLDER
+          EOF
+            
+            # Replace placeholders
+            sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" CHANGELOG.md
+            sed -i "s/DATE_PLACEHOLDER/$(date +%Y-%m-%d)/g" CHANGELOG.md
+            sed -i "s/COMMITS_PLACEHOLDER/$COMMITS/g" CHANGELOG.md
+          fi
           
           # Show what was generated
           echo "Generated changelog:"
@@ -104,8 +156,12 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add CHANGELOG.md
-          git commit -m "chore(release): update changelog for ${{ github.ref_name }}" || exit 0
-          git push
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore(release): update changelog for ${{ github.ref_name }}"
+            git push
+          fi
 
       - name: Extract changelog for release notes
         id: changelog
@@ -114,7 +170,16 @@ jobs:
           echo "Extracting changelog for release notes: $VERSION"
           
           # Extract content for this version from the generated changelog
-          CHANGELOG=$(awk "/## \[$VERSION\]/,/## \[.*\]/{if(/## \[$VERSION\]/) next; if(/## \[.*\]/) exit; print}" CHANGELOG.md)
+          if [ -f CHANGELOG.md ]; then
+            CHANGELOG=$(awk "/## \[$VERSION\]/,/## \[.*\]/{if(/## \[$VERSION\]/) next; if(/## \[.*\]/) exit; print}" CHANGELOG.md)
+            if [ -z "$CHANGELOG" ]; then
+              echo "No changelog found for version $VERSION, using fallback"
+              CHANGELOG="- Automated changelog generation"
+            fi
+          else
+            echo "CHANGELOG.md not found, using fallback"
+            CHANGELOG="- Automated changelog generation"
+          fi
           
           # Output the changelog
           {

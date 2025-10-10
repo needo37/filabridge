@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -177,6 +178,8 @@ func (c *PrusaLinkClient) GetJobInfo() (*PrusaLinkJob, error) {
 
 // GetPrinterInfo retrieves the printer information
 func (c *PrusaLinkClient) GetPrinterInfo() (*PrusaLinkInfo, error) {
+	log.Printf("🔍 [PrusaLink] Getting printer info from %s", c.baseURL)
+	
 	req, err := http.NewRequest("GET", c.baseURL+"/api/v1/info", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create printer info request: %w", err)
@@ -187,19 +190,34 @@ func (c *PrusaLinkClient) GetPrinterInfo() (*PrusaLinkInfo, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		log.Printf("❌ [PrusaLink] API call failed for %s: %v", c.baseURL, err)
 		return nil, fmt.Errorf("failed to get printer info from PrusaLink: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		log.Printf("❌ [PrusaLink] API error for %s: %d - %s", c.baseURL, resp.StatusCode, string(body))
 		return nil, fmt.Errorf("PrusaLink API error: %d - %s", resp.StatusCode, string(body))
 	}
 
+	// Read the raw response body for logging
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("❌ [PrusaLink] Failed to read response body from %s: %v", c.baseURL, err)
+		return nil, fmt.Errorf("failed to read printer info response: %w", err)
+	}
+
+	log.Printf("📥 [PrusaLink] Raw API response from %s: %s", c.baseURL, string(body))
+
 	var info PrusaLinkInfo
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+	if err := json.Unmarshal(body, &info); err != nil {
+		log.Printf("❌ [PrusaLink] JSON unmarshal failed for %s: %v", c.baseURL, err)
 		return nil, fmt.Errorf("failed to decode printer info response: %w", err)
 	}
+
+	log.Printf("✅ [PrusaLink] Parsed printer info from %s: hostname='%s', serial='%s', nozzle_diameter=%.2f, mmu=%v", 
+		c.baseURL, info.Hostname, info.Serial, info.NozzleDiameter, info.MMU)
 
 	return &info, nil
 }

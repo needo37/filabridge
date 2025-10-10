@@ -11,7 +11,7 @@ const (
 
 // Default configuration values
 const (
-	DefaultSpoolmanURL      = "http://localhost:8000"
+	DefaultSpoolmanURL      = "http://localhost:7912"
 	DefaultWebPort          = "5000"
 	DefaultPollInterval     = 30
 	DefaultFilamentEstimate = 5.0 // grams per toolhead fallback estimate

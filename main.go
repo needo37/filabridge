@@ -15,7 +15,7 @@ func main() {
 	var (
 		webOnly    = flag.Bool("web-only", false, "Run only the web interface")
 		bridgeOnly = flag.Bool("bridge-only", false, "Run only the bridge service")
-		port       = flag.String("port", "5000", "Web interface port")
+		port       = flag.String("port", DefaultWebPort, "Web interface port")
 		host       = flag.String("host", "0.0.0.0", "Web interface host")
 	)
 	flag.Parse()
@@ -39,7 +39,7 @@ func main() {
 	}
 
 	// Override port from config if not specified
-	if *port == "5000" && config.WebPort != "5000" {
+	if *port == DefaultWebPort && config.WebPort != DefaultWebPort {
 		*port = config.WebPort
 	}
 

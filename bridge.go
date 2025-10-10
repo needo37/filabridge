@@ -60,7 +60,7 @@ type PrinterData struct {
 func NewFilamentBridge(config *Config) (*FilamentBridge, error) {
 	bridge := &FilamentBridge{
 		config:         config,
-		spoolman:       NewSpoolmanClient("http://localhost:8000"), // Default URL, will be updated
+		spoolman:       NewSpoolmanClient(DefaultSpoolmanURL), // Default URL, will be updated
 		wasPrinting:    make(map[string]bool),
 		currentJobFile: make(map[string]string),
 	}
@@ -80,13 +80,13 @@ func NewFilamentBridge(config *Config) (*FilamentBridge, error) {
 
 // initDatabase initializes the SQLite database
 func (b *FilamentBridge) initDatabase() error {
-	dbFile := "filabridge.db"
+	dbFile := DefaultDBFileName
 	if b.config != nil && b.config.DBFile != "" {
 		dbFile = b.config.DBFile
 	}
 	// Check for environment variable (path only, append filename)
 	if envDBPath := os.Getenv("FILABRIDGE_DB_PATH"); envDBPath != "" {
-		dbFile = filepath.Join(envDBPath, "filabridge.db")
+		dbFile = filepath.Join(envDBPath, DefaultDBFileName)
 	}
 
 	db, err := sql.Open("sqlite3", dbFile)
@@ -150,11 +150,11 @@ func (b *FilamentBridge) initDatabase() error {
 // initializeDefaultConfig sets up default configuration values
 func (b *FilamentBridge) initializeDefaultConfig() error {
 	defaultConfigs := map[string]string{
-		"printer_ips":       "", // Comma-separated list of printer IP addresses
-		"prusalink_api_key": "", // PrusaLink API key for authentication
-		"spoolman_url":      "http://localhost:8000",
-		"poll_interval":     "30",
-		"web_port":          "5000",
+		ConfigKeyPrinterIPs:   "", // Comma-separated list of printer IP addresses
+		ConfigKeyAPIKey:       "", // PrusaLink API key for authentication
+		ConfigKeySpoolmanURL:  DefaultSpoolmanURL,
+		ConfigKeyPollInterval: fmt.Sprintf("%d", DefaultPollInterval),
+		ConfigKeyWebPort:      DefaultWebPort,
 	}
 
 	// Check if this is a fresh installation by checking if any config exists
@@ -183,11 +183,11 @@ func (b *FilamentBridge) initializeDefaultConfig() error {
 // getConfigDescription returns a description for a configuration key
 func getConfigDescription(key string) string {
 	descriptions := map[string]string{
-		"printer_ips":       "Comma-separated list of printer IP addresses for PrusaLink",
-		"prusalink_api_key": "PrusaLink API key for authentication",
-		"spoolman_url":      "URL of Spoolman instance",
-		"poll_interval":     "Polling interval in seconds",
-		"web_port":          "Port for web interface",
+		ConfigKeyPrinterIPs:   "Comma-separated list of printer IP addresses for PrusaLink",
+		ConfigKeyAPIKey:       "PrusaLink API key for authentication",
+		ConfigKeySpoolmanURL:  "URL of Spoolman instance",
+		ConfigKeyPollInterval: "Polling interval in seconds",
+		ConfigKeyWebPort:      "Port for web interface",
 	}
 	if desc, exists := descriptions[key]; exists {
 		return desc
@@ -446,9 +446,17 @@ func (b *FilamentBridge) LogPrintUsage(printerName string, toolheadID int, spool
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
+	// Get print start time from current job file tracking
+	printStarted := time.Now() // Default to now if we can't determine start time
+	if storedJobFile, exists := b.currentJobFile[printerName]; exists && storedJobFile != "" {
+		// If we have a stored job file, the print likely started when we first stored it
+		// This is a rough approximation - ideally we'd track this more precisely
+		printStarted = time.Now().Add(-time.Hour) // Assume 1 hour ago as rough estimate
+	}
+
 	_, err := b.db.Exec(
-		"INSERT INTO print_history (printer_name, toolhead_id, spool_id, filament_used, print_finished, job_name) VALUES (?, ?, ?, ?, ?, ?)",
-		printerName, toolheadID, spoolID, filamentUsed, time.Now(), jobName,
+		"INSERT INTO print_history (printer_name, toolhead_id, spool_id, filament_used, print_started, print_finished, job_name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		printerName, toolheadID, spoolID, filamentUsed, printStarted, time.Now(), jobName,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to log print usage: %w", err)
@@ -526,7 +534,7 @@ func (b *FilamentBridge) monitorPrusaLink(printerID string, config PrinterConfig
 
 	// SIMPLE LOGIC: Check if we just finished printing
 	// If we were printing in the previous cycle AND now we're finished, process it
-	if (currentState == "IDLE" || currentState == "FINISHED") && wasPrinting {
+	if (currentState == StateIdle || currentState == StateFinished) && wasPrinting {
 		// Use stored filename (should be available since we stored it when printing started)
 		filenameToUse := storedJobFile
 		if filenameToUse == "" {
@@ -545,22 +553,21 @@ func (b *FilamentBridge) monitorPrusaLink(printerID string, config PrinterConfig
 
 	// Update state tracking - minimize lock scope
 	b.mutex.Lock()
+	defer b.mutex.Unlock()
 
 	// Store the current job filename when printing starts (only if not already stored)
-	if currentState == "PRINTING" && currentJobFilename != "" && storedJobFile == "" {
+	if currentState == StatePrinting && currentJobFilename != "" && storedJobFile == "" {
 		b.currentJobFile[printerID] = currentJobFilename
 		log.Printf("📁 Stored job filename for %s (%s): %s", config.IPAddress, printerID, currentJobFilename)
 	}
 
 	// Update wasPrinting flag for NEXT cycle
-	b.wasPrinting[printerID] = currentState == "PRINTING"
+	b.wasPrinting[printerID] = currentState == StatePrinting
 
 	// Clear stored filename when print finishes
-	if currentState == "IDLE" || currentState == "FINISHED" {
+	if currentState == StateIdle || currentState == StateFinished {
 		b.currentJobFile[printerID] = ""
 	}
-
-	b.mutex.Unlock()
 
 	return nil
 }
@@ -569,10 +576,7 @@ func (b *FilamentBridge) monitorPrusaLink(printerID string, config PrinterConfig
 func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, filename string) error {
 	log.Printf("Print finished via PrusaLink (%s): %s", config.IPAddress, filename)
 
-	printerName := config.Name
-	if printerName == "" {
-		printerName = fmt.Sprintf("Printer_%s", config.IPAddress)
-	}
+	printerName := resolvePrinterName(config)
 
 	// Create PrusaLink client for this printer
 	prusaClient := NewPrusaLinkClient(config.IPAddress, config.APIKey)
@@ -606,6 +610,109 @@ func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, file
 		filamentUsage = b.estimateFilamentUsage(config.Toolheads)
 	}
 
+	// Process filament usage using helper function
+	if err := b.processFilamentUsage(printerName, filamentUsage, filename); err != nil {
+		log.Printf("Error processing filament usage: %v", err)
+	}
+
+	return nil
+}
+
+// estimateFilamentUsage provides a rough estimation when no accurate data is available
+func (b *FilamentBridge) estimateFilamentUsage(toolheadCount int) map[int]float64 {
+	// Very rough estimation: 5g per toolhead
+	// This is a fallback when no accurate data is available
+	usage := make(map[int]float64)
+	for i := 0; i < toolheadCount; i++ {
+		usage[i] = DefaultFilamentEstimate // 5g per toolhead as rough estimate
+	}
+	log.Printf("Using rough filament estimation: %.1fg per toolhead", DefaultFilamentEstimate)
+	return usage
+}
+
+// GetStatus gets current status of all printers and mappings
+func (b *FilamentBridge) GetStatus() (*PrinterStatus, error) {
+	status := &PrinterStatus{
+		Printers:         make(map[string]PrinterData),
+		ToolheadMappings: make(map[string]map[int]ToolheadMapping),
+		Timestamp:        time.Now(),
+	}
+
+	// Get a safe snapshot of the config to prevent iteration issues
+	configSnapshot := b.GetConfigSnapshot()
+	if configSnapshot == nil {
+		// No printers configured
+		status.Printers["no_printers"] = PrinterData{
+			Name:  "No Printers Configured",
+			State: StateNotConfigured,
+		}
+		return status, nil
+	}
+
+	// Get printer statuses from PrusaLink
+	if len(configSnapshot.Printers) > 0 {
+		for printerID, printerConfig := range configSnapshot.Printers {
+			if printerID == "no_printers" {
+				continue // Skip placeholder
+			}
+
+			client := NewPrusaLinkClient(printerConfig.IPAddress, printerConfig.APIKey)
+
+			// Use the configured printer name, not the hostname from PrusaLink
+			printerName := printerConfig.Name
+
+			// Get current status
+			printerStatus, err := client.GetStatus()
+			if err != nil {
+				status.Printers[printerID] = PrinterData{
+					Name:  printerName,
+					State: StateOffline,
+				}
+				continue
+			}
+
+			status.Printers[printerID] = PrinterData{
+				Name:  printerName,
+				State: printerStatus.Printer.State,
+			}
+		}
+	} else {
+		// No printers configured
+		status.Printers["no_printers"] = PrinterData{
+			Name:  "No Printers Configured",
+			State: StateNotConfigured,
+		}
+	}
+
+	// Get toolhead mappings for all printers
+	for printerID, printerConfig := range configSnapshot.Printers {
+		if printerID == "no_printers" {
+			continue // Skip placeholder
+		}
+
+		printerName := printerConfig.Name
+		mappings, err := b.GetToolheadMappings(printerName)
+		if err != nil {
+			log.Printf("Error getting toolhead mappings for %s: %v", printerName, err)
+			status.ToolheadMappings[printerID] = make(map[int]ToolheadMapping)
+		} else {
+			status.ToolheadMappings[printerID] = mappings
+		}
+	}
+
+	return status, nil
+}
+
+// resolvePrinterName resolves printer name from config, with fallback to IP-based name
+func resolvePrinterName(config PrinterConfig) string {
+	if config.Name != "" {
+		return config.Name
+	}
+	return fmt.Sprintf("Printer_%s", config.IPAddress)
+}
+
+// processFilamentUsage processes filament usage updates for all toolheads
+func (b *FilamentBridge) processFilamentUsage(printerName string, filamentUsage map[int]float64, jobName string) error {
 	// Update Spoolman with filament usage for each toolhead
 	for toolheadID, usedWeight := range filamentUsage {
 		if usedWeight <= 0 {
@@ -633,7 +740,7 @@ func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, file
 		}
 
 		// Log the usage in our database
-		if err := b.LogPrintUsage(printerName, toolheadID, spoolID, usedWeight, filename); err != nil {
+		if err := b.LogPrintUsage(printerName, toolheadID, spoolID, usedWeight, jobName); err != nil {
 			log.Printf("Error logging print usage: %v", err)
 		}
 
@@ -649,91 +756,6 @@ func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, file
 	}
 
 	return nil
-}
-
-// estimateFilamentUsage provides a rough estimation when no accurate data is available
-func (b *FilamentBridge) estimateFilamentUsage(toolheadCount int) map[int]float64 {
-	// Very rough estimation: 5g per toolhead
-	// This is a fallback when no accurate data is available
-	usage := make(map[int]float64)
-	for i := 0; i < toolheadCount; i++ {
-		usage[i] = 5.0 // 5g per toolhead as rough estimate
-	}
-	log.Printf("Using rough filament estimation: 5g per toolhead")
-	return usage
-}
-
-// GetStatus gets current status of all printers and mappings
-func (b *FilamentBridge) GetStatus() (*PrinterStatus, error) {
-	status := &PrinterStatus{
-		Printers:         make(map[string]PrinterData),
-		ToolheadMappings: make(map[string]map[int]ToolheadMapping),
-		Timestamp:        time.Now(),
-	}
-
-	// Get a safe snapshot of the config to prevent iteration issues
-	configSnapshot := b.GetConfigSnapshot()
-	if configSnapshot == nil {
-		// No printers configured
-		status.Printers["no_printers"] = PrinterData{
-			Name:  "No Printers Configured",
-			State: "not_configured",
-		}
-		return status, nil
-	}
-
-	// Get printer statuses from PrusaLink
-	if len(configSnapshot.Printers) > 0 {
-		for printerID, printerConfig := range configSnapshot.Printers {
-			if printerID == "no_printers" {
-				continue // Skip placeholder
-			}
-
-			client := NewPrusaLinkClient(printerConfig.IPAddress, printerConfig.APIKey)
-
-			// Use the configured printer name, not the hostname from PrusaLink
-			printerName := printerConfig.Name
-
-			// Get current status
-			printerStatus, err := client.GetStatus()
-			if err != nil {
-				status.Printers[printerID] = PrinterData{
-					Name:  printerName,
-					State: "offline",
-				}
-				continue
-			}
-
-			status.Printers[printerID] = PrinterData{
-				Name:  printerName,
-				State: printerStatus.Printer.State,
-			}
-		}
-	} else {
-		// No printers configured
-		status.Printers["no_printers"] = PrinterData{
-			Name:  "No Printers Configured",
-			State: "not_configured",
-		}
-	}
-
-	// Get toolhead mappings for all printers
-	for printerID, printerConfig := range configSnapshot.Printers {
-		if printerID == "no_printers" {
-			continue // Skip placeholder
-		}
-
-		printerName := printerConfig.Name
-		mappings, err := b.GetToolheadMappings(printerName)
-		if err != nil {
-			log.Printf("Error getting toolhead mappings for %s: %v", printerName, err)
-			status.ToolheadMappings[printerID] = make(map[int]ToolheadMapping)
-		} else {
-			status.ToolheadMappings[printerID] = mappings
-		}
-	}
-
-	return status, nil
 }
 
 // Close closes the database connection

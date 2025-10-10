@@ -79,7 +79,12 @@ func NewSpoolmanClient(baseURL string) *SpoolmanClient {
 	return &SpoolmanClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: SpoolmanTimeout * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        10,
+				MaxIdleConnsPerHost: 2,
+				IdleConnTimeout:     30 * time.Second,
+			},
 		},
 	}
 }
@@ -207,46 +212,6 @@ func (c *SpoolmanClient) UpdateSpool(spoolID int, data map[string]interface{}) e
 	return nil
 }
 
-// GetFilaments gets all available filament types
-func (c *SpoolmanClient) GetFilaments() ([]SpoolmanFilament, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/api/v1/filament")
-	if err != nil {
-		return nil, fmt.Errorf("error getting filaments from Spoolman: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, c.handleAPIError(resp)
-	}
-
-	var filaments []SpoolmanFilament
-	if err := json.NewDecoder(resp.Body).Decode(&filaments); err != nil {
-		return nil, fmt.Errorf("error decoding filaments from Spoolman: %w", err)
-	}
-
-	return filaments, nil
-}
-
-// GetVendors gets all vendors
-func (c *SpoolmanClient) GetVendors() ([]SpoolmanVendor, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/api/v1/vendor")
-	if err != nil {
-		return nil, fmt.Errorf("error getting vendors from Spoolman: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, c.handleAPIError(resp)
-	}
-
-	var vendors []SpoolmanVendor
-	if err := json.NewDecoder(resp.Body).Decode(&vendors); err != nil {
-		return nil, fmt.Errorf("error decoding vendors from Spoolman: %w", err)
-	}
-
-	return vendors, nil
-}
-
 // UpdateSpoolUsage updates spool used weight based on usage (core bridge functionality)
 func (c *SpoolmanClient) UpdateSpoolUsage(spoolID int, filamentUsed float64) error {
 	// Get current spool data
@@ -288,26 +253,6 @@ func (c *SpoolmanClient) UpdateSpoolUsage(spoolID int, filamentUsed float64) err
 		spoolID, spool.UsedWeight, newUsedWeight, filamentUsed)
 
 	return nil
-}
-
-// GetSpoolHistory gets the history of a specific spool
-func (c *SpoolmanClient) GetSpoolHistory(spoolID int) ([]map[string]interface{}, error) {
-	resp, err := c.httpClient.Get(fmt.Sprintf("%s/api/v1/spool/%d/history", c.baseURL, spoolID))
-	if err != nil {
-		return nil, fmt.Errorf("error getting spool history from Spoolman: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, c.handleAPIError(resp)
-	}
-
-	var history []map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&history); err != nil {
-		return nil, fmt.Errorf("error decoding spool history from Spoolman: %w", err)
-	}
-
-	return history, nil
 }
 
 // TestConnection tests the connection to Spoolman

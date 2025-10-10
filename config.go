@@ -47,18 +47,18 @@ func LoadConfig(bridge *FilamentBridge) (*Config, error) {
 	}
 
 	// Parse poll interval
-	pollInterval := 30
-	if pollStr, exists := configValues["poll_interval"]; exists {
+	pollInterval := DefaultPollInterval
+	if pollStr, exists := configValues[ConfigKeyPollInterval]; exists {
 		if parsed, err := strconv.Atoi(pollStr); err == nil {
 			pollInterval = parsed
 		}
 	}
 
 	config := &Config{
-		SpoolmanURL:  configValues["spoolman_url"],
+		SpoolmanURL:  configValues[ConfigKeySpoolmanURL],
 		PollInterval: time.Duration(pollInterval) * time.Second,
 		DBFile:       getDBFilePath(),
-		WebPort:      configValues["web_port"],
+		WebPort:      configValues[ConfigKeyWebPort],
 		Printers:     make(map[string]PrinterConfig),
 	}
 
@@ -108,7 +108,7 @@ func LoadConfig(bridge *FilamentBridge) (*Config, error) {
 // getDBFilePath returns the database file path, checking environment variable first
 func getDBFilePath() string {
 	if dbPath := os.Getenv("FILABRIDGE_DB_PATH"); dbPath != "" {
-		return filepath.Join(dbPath, "filabridge.db")
+		return filepath.Join(dbPath, DefaultDBFileName)
 	}
-	return "filabridge.db"
+	return DefaultDBFileName
 }

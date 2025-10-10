@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -67,9 +66,6 @@ func (ws *WebServer) setupRoutes() {
 		api.GET("/status", ws.statusHandler)
 		api.GET("/spools", ws.spoolsHandler)
 		api.POST("/map_toolhead", ws.mapToolheadHandler)
-		api.GET("/filaments", ws.getFilamentsHandler)
-		api.GET("/vendors", ws.getVendorsHandler)
-		api.GET("/spools/:id/history", ws.getSpoolHistoryHandler)
 		api.GET("/spoolman/test", ws.testSpoolmanConnectionHandler)
 		api.GET("/spoolman/debug", ws.debugSpoolmanHandler)
 		api.POST("/test/print_complete", ws.testPrintCompleteHandler)
@@ -125,7 +121,7 @@ func (ws *WebServer) dashboardHandler(c *gin.Context) {
 // hasConnectionErrors checks if there are connection errors
 func hasConnectionErrors(status *PrinterStatus) bool {
 	for _, printer := range status.Printers {
-		if printer.State == "offline" {
+		if printer.State == StateOffline {
 			return true
 		}
 	}
@@ -152,6 +148,35 @@ func (ws *WebServer) spoolsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, spools)
 }
 
+// validatePrinterConfig validates printer configuration input
+func validatePrinterConfig(config PrinterConfig) error {
+	if config.Name == "" {
+		return fmt.Errorf("printer name is required")
+	}
+	if config.IPAddress == "" {
+		return fmt.Errorf("IP address is required")
+	}
+	if config.Toolheads < 1 {
+		return fmt.Errorf("toolheads must be at least 1")
+	}
+	if config.Toolheads > 10 {
+		return fmt.Errorf("toolheads cannot exceed 10")
+	}
+	return nil
+}
+
+// validateIPAddress validates IP address format
+func validateIPAddress(ip string) error {
+	if ip == "" {
+		return fmt.Errorf("IP address cannot be empty")
+	}
+	// Basic IP validation - could be enhanced with proper regex
+	if len(ip) < 7 || len(ip) > 15 {
+		return fmt.Errorf("invalid IP address format")
+	}
+	return nil
+}
+
 // mapToolheadHandler maps a spool to a toolhead
 func (ws *WebServer) mapToolheadHandler(c *gin.Context) {
 	var req struct {
@@ -167,6 +192,11 @@ func (ws *WebServer) mapToolheadHandler(c *gin.Context) {
 
 	if req.PrinterName == "" || req.SpoolID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required parameters"})
+		return
+	}
+
+	if req.ToolheadID < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Toolhead ID must be non-negative"})
 		return
 	}
 
@@ -242,6 +272,18 @@ func (ws *WebServer) addPrinterHandler(c *gin.Context) {
 		return
 	}
 
+	// Validate printer configuration
+	if err := validatePrinterConfig(printerConfig); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate IP address
+	if err := validateIPAddress(printerConfig.IPAddress); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	// Generate a unique printer ID using nanosecond timestamp + random component
 	printerID := fmt.Sprintf("printer_%d_%d", time.Now().UnixNano(), time.Now().Nanosecond()%1000)
 
@@ -252,7 +294,7 @@ func (ws *WebServer) addPrinterHandler(c *gin.Context) {
 	}
 
 	// Reload configuration to include the new printer
-	if err := ws.bridge.ReloadConfig(); err != nil {
+	if err := ws.reloadBridgeConfig(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reload configuration"})
 		return
 	}
@@ -274,6 +316,18 @@ func (ws *WebServer) updatePrinterHandler(c *gin.Context) {
 		return
 	}
 
+	// Validate printer configuration
+	if err := validatePrinterConfig(printerConfig); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate IP address
+	if err := validateIPAddress(printerConfig.IPAddress); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	// Save the updated printer configuration
 	if err := ws.bridge.SavePrinterConfig(printerID, printerConfig); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -281,7 +335,7 @@ func (ws *WebServer) updatePrinterHandler(c *gin.Context) {
 	}
 
 	// Reload configuration to include the updated printer
-	if err := ws.bridge.ReloadConfig(); err != nil {
+	if err := ws.reloadBridgeConfig(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reload configuration"})
 		return
 	}
@@ -304,7 +358,7 @@ func (ws *WebServer) deletePrinterHandler(c *gin.Context) {
 	}
 
 	// Reload configuration to remove the deleted printer
-	if err := ws.bridge.ReloadConfig(); err != nil {
+	if err := ws.reloadBridgeConfig(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reload configuration"})
 		return
 	}
@@ -324,6 +378,12 @@ func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 		return
 	}
 
+	// Validate IP address
+	if err := validateIPAddress(req.IPAddress); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	// Create PrusaLink client
 	client := NewPrusaLinkClient(req.IPAddress, req.APIKey)
 
@@ -333,7 +393,7 @@ func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 		// If API call fails, return default values instead of error
 		// This allows users to add printers even if they're offline
 		c.JSON(http.StatusOK, gin.H{
-			"model":    "Unknown",
+			"model":    ModelUnknown,
 			"hostname": "Unknown",
 			"detected": false,
 			"warning":  "Could not connect to printer. You can still add it manually.",
@@ -342,19 +402,19 @@ func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 	}
 
 	// Determine model based on hostname
-	model := "Unknown"
+	model := ModelUnknown
 	hostname := strings.ToLower(printerInfo.Hostname)
 
-	if strings.Contains(hostname, "core") {
-		model = "CORE One"
-	} else if strings.Contains(hostname, "xl") {
-		model = "XL"
-	} else if strings.Contains(hostname, "mk4") {
-		model = "MK4"
-	} else if strings.Contains(hostname, "mk3") {
-		model = "MK3.5"
-	} else if strings.Contains(hostname, "mini") {
-		model = "MINI+"
+	if strings.Contains(hostname, ModelCorePattern) {
+		model = ModelCoreOne
+	} else if strings.Contains(hostname, ModelXLPattern) {
+		model = ModelXL
+	} else if strings.Contains(hostname, ModelMK4Pattern) {
+		model = ModelMK4
+	} else if strings.Contains(hostname, ModelMK3Pattern) {
+		model = ModelMK35
+	} else if strings.Contains(hostname, ModelMiniPattern) {
+		model = ModelMiniPlus
 	}
 
 	// Return detected information (toolheads will be provided by user)
@@ -363,44 +423,6 @@ func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 		"hostname": printerInfo.Hostname,
 		"detected": true,
 	})
-}
-
-// getFilamentsHandler returns all filament types
-func (ws *WebServer) getFilamentsHandler(c *gin.Context) {
-	filaments, err := ws.bridge.spoolman.GetFilaments()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, filaments)
-}
-
-// getVendorsHandler returns all vendors
-func (ws *WebServer) getVendorsHandler(c *gin.Context) {
-	vendors, err := ws.bridge.spoolman.GetVendors()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, vendors)
-}
-
-// getSpoolHistoryHandler returns the history of a specific spool
-func (ws *WebServer) getSpoolHistoryHandler(c *gin.Context) {
-	spoolID := c.Param("id")
-	id, err := strconv.Atoi(spoolID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid spool ID"})
-		return
-	}
-
-	history, err := ws.bridge.spoolman.GetSpoolHistory(id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, history)
 }
 
 // testSpoolmanConnectionHandler tests the connection to Spoolman
@@ -494,44 +516,11 @@ func (ws *WebServer) testPrintCompleteHandler(c *gin.Context) {
 	}
 
 	// Simulate the print completion with provided filament usage
-	printerName := config.Name
-	if printerName == "" {
-		printerName = fmt.Sprintf("Printer_%s", config.IPAddress)
-	}
+	printerName := resolvePrinterName(config)
 
-	// Update Spoolman with filament usage for each toolhead
-	for toolheadID, usedWeight := range request.FilamentUsage {
-		if usedWeight <= 0 {
-			continue
-		}
-
-		// Get the mapped spool for this toolhead
-		spoolID, err := ws.bridge.GetToolheadMapping(printerName, toolheadID)
-		if err != nil {
-			log.Printf("Error getting toolhead mapping for %s toolhead %d: %v",
-				printerName, toolheadID, err)
-			continue
-		}
-
-		if spoolID == 0 {
-			log.Printf("No spool mapped to %s toolhead %d, skipping filament usage update",
-				printerName, toolheadID)
-			continue
-		}
-
-		// Update Spoolman
-		if err := ws.bridge.spoolman.UpdateSpoolUsage(spoolID, usedWeight); err != nil {
-			log.Printf("Error updating spool %d usage: %v", spoolID, err)
-			continue
-		}
-
-		// Log the usage in our database
-		if err := ws.bridge.LogPrintUsage(printerName, toolheadID, spoolID, usedWeight, request.JobName); err != nil {
-			log.Printf("Error logging print usage: %v", err)
-		}
-
-		log.Printf("Updated spool %d: used %.2fg filament on %s toolhead %d",
-			spoolID, usedWeight, printerName, toolheadID)
+	// Process filament usage using helper function
+	if err := ws.bridge.processFilamentUsage(printerName, request.FilamentUsage, request.JobName); err != nil {
+		log.Printf("Error processing filament usage: %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -540,6 +529,15 @@ func (ws *WebServer) testPrintCompleteHandler(c *gin.Context) {
 		"job":            request.JobName,
 		"filament_usage": request.FilamentUsage,
 	})
+}
+
+// reloadBridgeConfig reloads the bridge configuration after changes
+func (ws *WebServer) reloadBridgeConfig() error {
+	// Reload configuration to include changes
+	if err := ws.bridge.ReloadConfig(); err != nil {
+		return fmt.Errorf("failed to reload configuration: %w", err)
+	}
+	return nil
 }
 
 // Start starts the web server

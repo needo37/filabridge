@@ -95,7 +95,12 @@ func NewPrusaLinkClient(ipAddress, apiKey string) *PrusaLinkClient {
 		baseURL: fmt.Sprintf("http://%s", ipAddress),
 		apiKey:  apiKey,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second, // Reduced timeout to prevent hanging
+			Timeout: PrusaLinkTimeout * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        10,
+				MaxIdleConnsPerHost: 2,
+				IdleConnTimeout:     30 * time.Second,
+			},
 		},
 	}
 }
@@ -197,69 +202,6 @@ func (c *PrusaLinkClient) GetPrinterInfo() (*PrusaLinkInfo, error) {
 	}
 
 	return &info, nil
-}
-
-// GetToolheadCount determines the number of toolheads by examining the raw JSON response
-func (c *PrusaLinkClient) GetToolheadCount() (int, error) {
-	// Try the /api/printer endpoint first as it may have more detailed tool information
-	req, err := http.NewRequest("GET", c.baseURL+"/api/printer", nil)
-	if err != nil {
-		return 0, fmt.Errorf("failed to create printer request: %w", err)
-	}
-
-	// Add API key authentication
-	c.addAPIKey(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get status from PrusaLink: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return 0, fmt.Errorf("PrusaLink API error: %d - %s", resp.StatusCode, string(body))
-	}
-
-	// Read the raw response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Parse as generic JSON to count tool fields
-	var rawResponse map[string]interface{}
-	if err := json.Unmarshal(body, &rawResponse); err != nil {
-		return 0, fmt.Errorf("failed to parse JSON response: %w", err)
-	}
-
-	// Look for temperature section with individual tool data
-	temperature, ok := rawResponse["temperature"].(map[string]interface{})
-	if !ok {
-		// Fallback to printer section if temperature not found
-		printer, ok := rawResponse["printer"].(map[string]interface{})
-		if !ok {
-			return 1, nil // Default to 1 if structure is unexpected
-		}
-		temperature = printer
-	}
-
-	// Count toolheads by looking for tool0, tool1, tool2, etc. in temperature data
-	toolheadCount := 0
-	toolRegex := regexp.MustCompile(`^tool\d+$`)
-
-	for key := range temperature {
-		if toolRegex.MatchString(key) {
-			toolheadCount++
-		}
-	}
-
-	// Ensure we have at least 1 toolhead (tool0 should always be present)
-	if toolheadCount == 0 {
-		toolheadCount = 1
-	}
-
-	return toolheadCount, nil
 }
 
 // GetGcodeFile downloads the G-code file for a completed print job

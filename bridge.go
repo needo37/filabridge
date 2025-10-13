@@ -650,9 +650,9 @@ func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, file
 
 	// Use the filename parameter (stored when print started)
 	if filename == "" {
-		errorMsg := "No filename available for print processing"
+		errorMsg := "no filename available for print processing"
 		b.addPrintError(printerName, "unknown", errorMsg)
-		return fmt.Errorf(errorMsg)
+		return fmt.Errorf("%s", errorMsg)
 	}
 
 	// Download and parse the .bgcode file for filament usage
@@ -661,24 +661,24 @@ func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, file
 	// Download with retry logic
 	gcodeContent, err := prusaClient.GetGcodeFileWithRetry(filename)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to download G-code file after retries: %v", err)
+		errorMsg := fmt.Sprintf("failed to download G-code file after retries: %v", err)
 		b.addPrintError(printerName, filename, errorMsg)
-		return fmt.Errorf(errorMsg)
+		return fmt.Errorf("%s", errorMsg)
 	}
 
 	// Parse the downloaded file
 	filamentUsage, err := prusaClient.ParseGcodeFilamentUsage(gcodeContent)
 	if err != nil {
-		errorMsg := fmt.Sprintf("Failed to parse G-code for filament usage: %v", err)
+		errorMsg := fmt.Sprintf("failed to parse G-code for filament usage: %v", err)
 		b.addPrintError(printerName, filename, errorMsg)
-		return fmt.Errorf(errorMsg)
+		return fmt.Errorf("%s", errorMsg)
 	}
 
 	// Check if we got any filament usage data
 	if len(filamentUsage) == 0 {
-		errorMsg := "No filament usage data found in G-code file"
+		errorMsg := "no filament usage data found in G-code file"
 		b.addPrintError(printerName, filename, errorMsg)
-		return fmt.Errorf(errorMsg)
+		return fmt.Errorf("%s", errorMsg)
 	}
 
 	log.Printf("Successfully parsed .bgcode file for filament usage: %+v", filamentUsage)

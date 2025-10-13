@@ -84,52 +84,21 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Install git-chglog
-        run: |
-          # Download the latest release directly
-          echo "Downloading git-chglog..."
-          wget -O git-chglog.tar.gz https://github.com/git-chglog/git-chglog/releases/download/v0.15.4/git-chglog_0.15.4_linux_amd64.tar.gz
-          
-          # Extract and install
-          echo "Extracting git-chglog..."
-          tar -xzf git-chglog.tar.gz
-          
-          # Install to system path
-          echo "Installing git-chglog..."
-          sudo mv git-chglog /usr/local/bin/
-          sudo chmod +x /usr/local/bin/git-chglog
-          
-          # Verify installation
-          echo "Verifying installation..."
-          git-chglog --version
-          
-          # Clean up
-          rm -f git-chglog.tar.gz
-
       - name: Generate changelog
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           echo "Generating changelog for version: $VERSION"
           
-          # Check if git-chglog is available
-          which git-chglog
-          git-chglog --version
-          
-          # Generate changelog for this version only
-          if git-chglog --output CHANGELOG.md; then
-            echo "git-chglog succeeded"
+          # Generate changelog from git commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s" HEAD)
           else
-            echo "git-chglog failed, falling back to manual generation"
-            # Fallback: generate from git commits since last tag
-            LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-            if [ -z "$LAST_TAG" ]; then
-              COMMITS=$(git log --pretty=format:"- %s" HEAD)
-            else
-              COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
-            fi
-            
-            # Create a simple changelog entry
-            cat > CHANGELOG.md << 'EOF'
+            COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
+          fi
+          
+          # Create a simple changelog entry
+          cat > CHANGELOG.md << 'EOF'
           # Changelog
           
           All notable changes to FilaBridge will be documented in this file.
@@ -143,11 +112,10 @@ jobs:
           COMMITS_PLACEHOLDER
           EOF
             
-            # Replace placeholders
-            sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" CHANGELOG.md
-            sed -i "s/DATE_PLACEHOLDER/$(date +%Y-%m-%d)/g" CHANGELOG.md
-            sed -i "s/COMMITS_PLACEHOLDER/$COMMITS/g" CHANGELOG.md
-          fi
+          # Replace placeholders
+          sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" CHANGELOG.md
+          sed -i "s/DATE_PLACEHOLDER/$(date +%Y-%m-%d)/g" CHANGELOG.md
+          sed -i "s/COMMITS_PLACEHOLDER/$COMMITS/g" CHANGELOG.md
           
           # Show what was generated
           echo "Generated changelog:"
@@ -178,31 +146,54 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/}
           echo "Extracting changelog for release notes: $VERSION"
           
-          # Extract content for this version from the generated changelog
-          if [ -f CHANGELOG.md ]; then
-            # Extract the section for this version, excluding the header line
-            CHANGELOG=$(awk "/## \[$VERSION\]/,/## \[.*\]/{if(/## \[$VERSION\]/) next; if(/## \[.*\]/) exit; print}" CHANGELOG.md | sed '/^$/d')
-            if [ -z "$CHANGELOG" ]; then
-              echo "No changelog found for version $VERSION, using git commits"
-              # Fallback: get commits since last tag
-              LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-              if [ -z "$LAST_TAG" ]; then
-                COMMITS=$(git log --pretty=format:"- %s" HEAD --grep="^feat:\|^fix:\|^chore:\|^docs:\|^style:\|^refactor:\|^bug:")
-              else
-                COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD --grep="^feat:\|^fix:\|^chore:\|^docs:\|^style:\|^refactor:\|^bug:")
-              fi
-              CHANGELOG="$COMMITS"
-            fi
+          # Get commits since last tag, excluding release commits
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s" HEAD)
           else
-            echo "CHANGELOG.md not found, using git commits"
-            # Fallback: get commits since last tag
-            LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-            if [ -z "$LAST_TAG" ]; then
-                COMMITS=$(git log --pretty=format:"- %s" HEAD --grep="^feat:\|^fix:\|^chore:\|^docs:\|^style:\|^refactor:\|^bug:")
-            else
-              COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD --grep="^feat:\|^fix:\|^chore:\|^docs:\|^style:\|^refactor:\|^bug:")
+            COMMITS=$(git log --pretty=format:"%s" $LAST_TAG..HEAD)
+          fi
+          
+          # Filter out release commits and format by type
+          FEATURES=""
+          FIXES=""
+          CHANGES=""
+          DOCS=""
+          
+          while IFS= read -r commit; do
+            # Skip release commits
+            if [[ "$commit" =~ ^(chore\(release\)|chore: update changelog) ]]; then
+              continue
             fi
-            CHANGELOG="$COMMITS"
+            
+            # Categorize commits
+            if [[ "$commit" =~ ^feat: ]]; then
+              FEATURES="${FEATURES}- ${commit#feat: }\n"
+            elif [[ "$commit" =~ ^(fix|bug): ]]; then
+              FIXES="${FIXES}- ${commit#fix: }\n"
+              FIXES="${FIXES//bug: /}"
+            elif [[ "$commit" =~ ^(chore|refactor|style): ]]; then
+              CHANGES="${CHANGES}- ${commit#chore: }\n"
+              CHANGES="${CHANGES//refactor: /}"
+              CHANGES="${CHANGES//style: /}"
+            elif [[ "$commit" =~ ^docs: ]]; then
+              DOCS="${DOCS}- ${commit#docs: }\n"
+            fi
+          done <<< "$COMMITS"
+          
+          # Build the changelog
+          CHANGELOG=""
+          if [ -n "$FEATURES" ]; then
+            CHANGELOG="${CHANGELOG}### Added\n${FEATURES}\n"
+          fi
+          if [ -n "$FIXES" ]; then
+            CHANGELOG="${CHANGELOG}### Fixed\n${FIXES}\n"
+          fi
+          if [ -n "$CHANGES" ]; then
+            CHANGELOG="${CHANGELOG}### Changed\n${CHANGES}\n"
+          fi
+          if [ -n "$DOCS" ]; then
+            CHANGELOG="${CHANGELOG}### Documentation\n${DOCS}\n"
           fi
           
           # If still empty, use a generic message
@@ -210,10 +201,13 @@ jobs:
             CHANGELOG="- Automated changelog generation"
           fi
           
+          echo "Generated changelog:"
+          echo "$CHANGELOG"
+          
           # Output the changelog
           {
             echo "CHANGELOG<<EOF"
-            echo "$CHANGELOG"
+            echo -e "$CHANGELOG"
             echo "EOF"
           } >> $GITHUB_OUTPUT
 

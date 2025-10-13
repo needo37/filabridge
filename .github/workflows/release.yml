@@ -180,13 +180,33 @@ jobs:
           
           # Extract content for this version from the generated changelog
           if [ -f CHANGELOG.md ]; then
-            CHANGELOG=$(awk "/## \[$VERSION\]/,/## \[.*\]/{if(/## \[$VERSION\]/) next; if(/## \[.*\]/) exit; print}" CHANGELOG.md)
+            # Extract the section for this version, excluding the header line
+            CHANGELOG=$(awk "/## \[$VERSION\]/,/## \[.*\]/{if(/## \[$VERSION\]/) next; if(/## \[.*\]/) exit; print}" CHANGELOG.md | sed '/^$/d')
             if [ -z "$CHANGELOG" ]; then
-              echo "No changelog found for version $VERSION, using fallback"
-              CHANGELOG="- Automated changelog generation"
+              echo "No changelog found for version $VERSION, using git commits"
+              # Fallback: get commits since last tag
+              LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+              if [ -z "$LAST_TAG" ]; then
+                COMMITS=$(git log --pretty=format:"- %s" HEAD --grep="^feat:\|^fix:\|^chore:\|^docs:\|^style:\|^refactor:\|^bug:")
+              else
+                COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD --grep="^feat:\|^fix:\|^chore:\|^docs:\|^style:\|^refactor:\|^bug:")
+              fi
+              CHANGELOG="$COMMITS"
             fi
           else
-            echo "CHANGELOG.md not found, using fallback"
+            echo "CHANGELOG.md not found, using git commits"
+            # Fallback: get commits since last tag
+            LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+            if [ -z "$LAST_TAG" ]; then
+                COMMITS=$(git log --pretty=format:"- %s" HEAD --grep="^feat:\|^fix:\|^chore:\|^docs:\|^style:\|^refactor:\|^bug:")
+            else
+              COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD --grep="^feat:\|^fix:\|^chore:\|^docs:\|^style:\|^refactor:\|^bug:")
+            fi
+            CHANGELOG="$COMMITS"
+          fi
+          
+          # If still empty, use a generic message
+          if [ -z "$CHANGELOG" ]; then
             CHANGELOG="- Automated changelog generation"
           fi
           

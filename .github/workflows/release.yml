@@ -115,7 +115,10 @@ jobs:
           # Replace placeholders
           sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" CHANGELOG.md
           sed -i "s/DATE_PLACEHOLDER/$(date +%Y-%m-%d)/g" CHANGELOG.md
-          sed -i "s/COMMITS_PLACEHOLDER/$COMMITS/g" CHANGELOG.md
+          # Use a different approach for commits to handle newlines and special characters
+          echo "$COMMITS" > /tmp/commits.txt
+          sed -i '/COMMITS_PLACEHOLDER/r /tmp/commits.txt' CHANGELOG.md
+          sed -i 's/COMMITS_PLACEHOLDER//' CHANGELOG.md
           
           # Show what was generated
           echo "Generated changelog:"

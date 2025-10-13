@@ -624,7 +624,7 @@
                                                 {{range $.Spools}}
                                                 {{if eq .ID $mappedSpool.SpoolID}}
                                                 <div class="color-swatch" data-color="{{.Filament.ColorHex}}"></div>
-                                                <span>{{if .Material}}{{.Material}}{{else}}Unknown Material{{end}} - {{if .Brand}}{{.Brand}}{{else}}Unknown Brand{{end}} - {{if .Name}}{{.Name}}{{else}}Unnamed Spool{{end}}{{if .RemainingWeight}} ({{printf "%.0f" .RemainingWeight}}g remaining){{end}}</span>
+                                                <span>[{{.ID}}] {{if .Material}}{{.Material}}{{else}}Unknown Material{{end}} - {{if .Brand}}{{.Brand}}{{else}}Unknown Brand{{end}} - {{if .Name}}{{.Name}}{{else}}Unnamed Spool{{end}}{{if .RemainingWeight}} ({{printf "%.0f" .RemainingWeight}}g remaining){{end}}</span>
                                                 {{end}}
                                                 {{end}}
                                                 {{else}}
@@ -646,7 +646,7 @@
                                                 {{range $.Spools}}
                                                 <div class="dropdown-option" data-value="{{.ID}}" data-color="{{.Filament.ColorHex}}" {{if $mappedSpool.SpoolID}}{{if eq .ID $mappedSpool.SpoolID}}class="selected"{{end}}{{end}}>
                                                     <div class="color-swatch" data-color="{{.Filament.ColorHex}}"></div>
-                                                    <div class="option-text">{{if .Material}}{{.Material}}{{else}}Unknown Material{{end}} - {{if .Brand}}{{.Brand}}{{else}}Unknown Brand{{end}} - {{if .Name}}{{.Name}}{{else}}Unnamed Spool{{end}}{{if .RemainingWeight}} ({{printf "%.0f" .RemainingWeight}}g remaining){{end}}</div>
+                                                    <div class="option-text">[{{.ID}}] {{if .Material}}{{.Material}}{{else}}Unknown Material{{end}} - {{if .Brand}}{{.Brand}}{{else}}Unknown Brand{{end}} - {{if .Name}}{{.Name}}{{else}}Unnamed Spool{{end}}{{if .RemainingWeight}} ({{printf "%.0f" .RemainingWeight}}g remaining){{end}}</div>
                                                 </div>
                                                 {{end}}
                                                 <div class="dropdown-no-results">No spools found</div>
@@ -840,7 +840,7 @@
                     
                     const optionText = document.createElement('div');
                     optionText.className = 'option-text';
-                    optionText.textContent = `${spool.material || 'Unknown Material'} - ${spool.brand || 'Unknown Brand'} - ${spool.name || 'Unnamed Spool'}${spool.remaining_weight ? ` (${Math.round(spool.remaining_weight)}g remaining)` : ''}`;
+                    optionText.textContent = `[${spool.id}] ${spool.material || 'Unknown Material'} - ${spool.brand || 'Unknown Brand'} - ${spool.name || 'Unnamed Spool'}${spool.remaining_weight ? ` (${Math.round(spool.remaining_weight)}g remaining)` : ''}`;
                     
                     option.appendChild(colorSwatch);
                     option.appendChild(optionText);
@@ -908,7 +908,20 @@
                         
                         options.forEach(option => {
                             const optionText = option.querySelector('.option-text').textContent.toLowerCase();
-                            const isMatch = searchTerm === '' || optionText.includes(searchTerm);
+                            let isMatch = searchTerm === '';
+                            
+                            if (searchTerm !== '') {
+                                // Check if search term is purely numeric
+                                if (/^\d+$/.test(searchTerm)) {
+                                    // For numeric search, only match the ID in brackets
+                                    const idMatch = optionText.match(/^\[(\d+)\]/);
+                                    isMatch = idMatch && idMatch[1] === searchTerm;
+                                } else {
+                                    // For text search, use word boundary matching
+                                    const searchRegex = new RegExp('\\b' + searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+                                    isMatch = searchRegex.test(optionText);
+                                }
+                            }
                             
                             if (isMatch) {
                                 option.style.display = 'flex';
@@ -1706,7 +1719,7 @@
                     
                     const optionText = document.createElement('div');
                     optionText.className = 'option-text';
-                    optionText.textContent = `${spool.material || 'Unknown Material'} - ${spool.brand || 'Unknown Brand'} - ${spool.name || 'Unnamed Spool'}${spool.remaining_weight ? ` (${Math.round(spool.remaining_weight)}g remaining)` : ''}`;
+                    optionText.textContent = `[${spool.id}] ${spool.material || 'Unknown Material'} - ${spool.brand || 'Unknown Brand'} - ${spool.name || 'Unnamed Spool'}${spool.remaining_weight ? ` (${Math.round(spool.remaining_weight)}g remaining)` : ''}`;
                     
                     option.appendChild(colorSwatch);
                     option.appendChild(optionText);
@@ -1876,7 +1889,20 @@
                     
                     options.forEach(option => {
                         const optionText = option.querySelector('.option-text').textContent.toLowerCase();
-                        const isMatch = searchTerm === '' || optionText.includes(searchTerm);
+                        let isMatch = searchTerm === '';
+                        
+                        if (searchTerm !== '') {
+                            // Check if search term is purely numeric
+                            if (/^\d+$/.test(searchTerm)) {
+                                // For numeric search, only match the ID in brackets
+                                const idMatch = optionText.match(/^\[(\d+)\]/);
+                                isMatch = idMatch && idMatch[1] === searchTerm;
+                            } else {
+                                // For text search, use word boundary matching
+                                const searchRegex = new RegExp('\\b' + searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+                                isMatch = searchRegex.test(optionText);
+                            }
+                        }
                         
                         if (isMatch) {
                             option.style.display = 'flex';

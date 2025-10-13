@@ -29,7 +29,7 @@ const (
 // HTTP timeouts
 const (
 	PrusaLinkTimeout             = 10 // seconds
-	PrusaLinkFileDownloadTimeout = 30 // seconds for file downloads
+	PrusaLinkFileDownloadTimeout = 60 // seconds for file downloads (USB storage can be slow)
 	SpoolmanTimeout              = 30 // seconds
 )
 

@@ -265,13 +265,18 @@ func (c *PrusaLinkClient) GetGcodeFileWithRetry(filename string) ([]byte, error)
 
 		// Create a new client with extended timeout for file downloads
 		fileClient := &http.Client{
-			Timeout: PrusaLinkFileDownloadTimeout * time.Second,
+			Timeout: time.Duration(PrusaLinkFileDownloadTimeout) * time.Second,
 			Transport: &http.Transport{
-				MaxIdleConns:        10,
-				MaxIdleConnsPerHost: 2,
-				IdleConnTimeout:     30 * time.Second,
+				MaxIdleConns:          10,
+				MaxIdleConnsPerHost:   2,
+				IdleConnTimeout:       90 * time.Second,
+				ResponseHeaderTimeout: 30 * time.Second,
+				ExpectContinueTimeout: 1 * time.Second,
 			},
 		}
+
+		// Add diagnostic logging to verify timeout values
+		log.Printf("File download client configured with %v timeout", fileClient.Timeout)
 
 		// Use the correct PrusaLink API format: /{filename}
 		req, err := http.NewRequest("GET", c.baseURL+"/"+filename, nil)

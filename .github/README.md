@@ -13,20 +13,25 @@ I run multiple 3D printers and use Spoolman to track my filament inventory. The 
 ## Features
 
 - 🔗 **PrusaLink Compatibility**: Works with any PrusaLink-compatible printer (Prusa CORE One, XL, MK4, Mini, and more)
-- 📊 **Real-time Dashboard**: Web interface to view printer status and manage filament mappings
+- 📊 **Real-time Dashboard**: Web interface with live updates via WebSocket connections
 - 🎯 **Multi-Toolhead Support**: Seamlessly handles single and multi-toolhead printers (tested with 5-toolhead Prusa XL)
 - 📈 **Smart Usage Tracking**: Automatically parses G-code files to accurately track filament consumption per toolhead
 - 💾 **Persistent Storage**: SQLite database stores toolhead mappings and complete print history
 - ⚡ **High Performance**: Single lightweight binary, minimal resource usage, fast execution
 - 🔧 **Web-based Config**: No config files needed - manage everything through the web UI
+- 🔍 **Smart Spool Search**: Search and filter spools by ID, material, brand, or name with real-time filtering
+- ⚠️ **Error Handling**: Print error detection with acknowledgment system for failed filament tracking
+- 🔄 **Auto-mapping**: Automatic spool assignment when selecting from dropdown menus
+- 🌐 **Live Updates**: Real-time status updates without page refreshes using WebSocket technology
 
 ## Why FilaBridge?
 
 Managing filament inventory across multiple 3D printers is tedious. FilaBridge automates this by:
-- Monitoring your printers in real-time
+- Monitoring your printers in real-time with live WebSocket updates
 - Tracking which spools are loaded on which toolheads
 - Automatically updating your Spoolman inventory when prints complete
 - Providing accurate filament usage by parsing G-code files
+- Handling errors gracefully with clear notifications and acknowledgment system
 
 No more manual updates or guesswork about remaining filament!
 
@@ -144,16 +149,20 @@ The system stores all configuration in the SQLite database. For Docker deploymen
 
 The web interface provides:
 
-- **Printer Status**: Real-time view of printer states and current jobs
-- **Toolhead Mapping**: Assign filament spools to specific toolheads
+- **Printer Status**: Real-time view of printer states and current jobs with live WebSocket updates
+- **Toolhead Mapping**: Assign filament spools to specific toolheads with smart search functionality
 - **Progress Monitoring**: Visual progress bars for active prints
-- **Auto-refresh**: Updates every 30 seconds automatically
+- **Live Updates**: Real-time status updates without page refreshes
+- **Spool Search**: Search and filter spools by ID, material, brand, or name
+- **Error Management**: View and acknowledge print processing errors
+- **Auto-mapping**: Automatic spool assignment when selecting from dropdowns
 
 ### Filament Management
 
 1. **Add spools to Spoolman**: Use Spoolman's web interface to add your filament spools
-2. **Map spools to toolheads**: Use the FilaBridge web interface to assign spools
+2. **Map spools to toolheads**: Use the FilaBridge web interface to assign spools with smart search
 3. **Monitor usage**: The system automatically tracks and updates filament usage
+4. **Handle errors**: Acknowledge any print processing errors that require manual intervention
 
 ## API Endpoints
 
@@ -163,6 +172,9 @@ The web interface also provides REST API endpoints:
 - `GET /api/spools` - Get all spools from Spoolman
 - `POST /api/map_toolhead` - Map a spool to a toolhead
 - `POST /api/unmap_toolhead` - Unmap a spool from a toolhead
+- `GET /api/print-errors` - Get all unacknowledged print errors
+- `POST /api/print-errors/{id}/acknowledge` - Acknowledge a print error
+- `WS /ws/status` - WebSocket endpoint for real-time status updates
 
 ## Project Structure
 
@@ -198,12 +210,24 @@ filabridge/
    - Check that prints are completing (not just pausing)
    - Verify PrusaLink API is returning filament usage data
 
+4. **WebSocket connection issues**:
+   - Check browser console for WebSocket connection errors
+   - Ensure no firewall is blocking WebSocket connections
+   - The interface will fall back to periodic polling if WebSocket fails
+
+5. **Print processing errors**:
+   - Check the error notifications in the web interface
+   - Acknowledge errors after manually updating Spoolman
+   - Review logs for detailed error information
+
 ### Logs
 
 The service logs important events to the console. Look for:
 - Printer status updates
 - Filament usage calculations
 - Spoolman update confirmations
+- WebSocket connection status
+- Print processing errors
 - Error messages
 
 ## Development
@@ -240,6 +264,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 - [ ] Support for additional printer APIs
 - [x] Provide a Docker Image
+- [x] Real-time WebSocket updates
+- [x] Enhanced spool search functionality
+- [x] Print error handling and acknowledgment
 - [ ] NFC Support
 - [ ] Mobile-responsive UI improvements
 

@@ -179,7 +179,7 @@ func (c *PrusaLinkClient) GetJobInfo() (*PrusaLinkJob, error) {
 // GetPrinterInfo retrieves the printer information
 func (c *PrusaLinkClient) GetPrinterInfo() (*PrusaLinkInfo, error) {
 	log.Printf("🔍 [PrusaLink] Getting printer info from %s", c.baseURL)
-	
+
 	req, err := http.NewRequest("GET", c.baseURL+"/api/v1/info", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create printer info request: %w", err)
@@ -216,7 +216,7 @@ func (c *PrusaLinkClient) GetPrinterInfo() (*PrusaLinkInfo, error) {
 		return nil, fmt.Errorf("failed to decode printer info response: %w", err)
 	}
 
-	log.Printf("✅ [PrusaLink] Parsed printer info from %s: hostname='%s', serial='%s', nozzle_diameter=%.2f, mmu=%v", 
+	log.Printf("✅ [PrusaLink] Parsed printer info from %s: hostname='%s', serial='%s', nozzle_diameter=%.2f, mmu=%v",
 		c.baseURL, info.Hostname, info.Serial, info.NozzleDiameter, info.MMU)
 
 	return &info, nil
@@ -251,6 +251,81 @@ func (c *PrusaLinkClient) GetGcodeFile(filename string) ([]byte, error) {
 	}
 
 	return body, nil
+}
+
+// GetGcodeFileWithRetry downloads the G-code file with retry logic and exponential backoff
+func (c *PrusaLinkClient) GetGcodeFileWithRetry(filename string) ([]byte, error) {
+	const maxRetries = 3
+	backoffDelays := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
+
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		log.Printf("Downloading G-code file attempt %d/%d: %s", attempt+1, maxRetries, filename)
+
+		// Create a new client with extended timeout for file downloads
+		fileClient := &http.Client{
+			Timeout: PrusaLinkFileDownloadTimeout * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        10,
+				MaxIdleConnsPerHost: 2,
+				IdleConnTimeout:     30 * time.Second,
+			},
+		}
+
+		// Use the correct PrusaLink API format: /{filename}
+		req, err := http.NewRequest("GET", c.baseURL+"/"+filename, nil)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to create G-code request: %w", err)
+			log.Printf("Attempt %d failed: %v", attempt+1, lastErr)
+			if attempt < maxRetries-1 {
+				time.Sleep(backoffDelays[attempt])
+			}
+			continue
+		}
+
+		// Add API key authentication
+		c.addAPIKey(req)
+
+		resp, err := fileClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to get G-code file from PrusaLink: %w", err)
+			log.Printf("Attempt %d failed: %v", attempt+1, lastErr)
+			if attempt < maxRetries-1 {
+				time.Sleep(backoffDelays[attempt])
+			}
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			lastErr = fmt.Errorf("PrusaLink API error: %d - %s", resp.StatusCode, string(body))
+			log.Printf("Attempt %d failed: %v", attempt+1, lastErr)
+			if attempt < maxRetries-1 {
+				time.Sleep(backoffDelays[attempt])
+			}
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = fmt.Errorf("failed to read G-code file: %w", err)
+			log.Printf("Attempt %d failed: %v", attempt+1, lastErr)
+			if attempt < maxRetries-1 {
+				time.Sleep(backoffDelays[attempt])
+			}
+			continue
+		}
+
+		// Success!
+		log.Printf("Successfully downloaded G-code file on attempt %d: %s (%d bytes)",
+			attempt+1, filename, len(body))
+		return body, nil
+	}
+
+	return nil, fmt.Errorf("failed to download G-code file after %d attempts: %w", maxRetries, lastErr)
 }
 
 // ParseGcodeFilamentUsage extracts filament usage from .bgcode content

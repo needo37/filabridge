@@ -576,6 +576,22 @@
                     </div>
                     {{end}}
 
+                    {{if .HasPrintErrors}}
+                    <div id="print-errors-container">
+                        {{range .PrintErrors}}
+                        <div class="print-error" data-error-id="{{.ID}}" style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 20px; margin: 20px 0; border-radius: 8px;">
+                            <h4 style="margin-top: 0;">⚠️ Print Processing Failed</h4>
+                            <p><strong>Printer:</strong> {{.PrinterName}}</p>
+                            <p><strong>File:</strong> {{.Filename}}</p>
+                            <p><strong>Time:</strong> {{.Timestamp.Format "2006-01-02 15:04:05"}}</p>
+                            <p><strong>Error:</strong> {{.Error}}</p>
+                            <p><strong>Action Required:</strong> Please update Spoolman manually with the correct filament usage for this print.</p>
+                            <button class="btn" onclick="acknowledgeError('{{.ID}}')" style="background: #dc3545; margin-top: 10px;">Acknowledge</button>
+                        </div>
+                        {{end}}
+                    </div>
+                    {{end}}
+
 
 
                     {{range $printerID, $printerConfig := .Printers}}
@@ -1640,6 +1656,11 @@
             if (data.toolhead_mappings) {
                 updateToolheadMappings(data.toolhead_mappings);
             }
+            
+            // Update print errors
+            if (data.print_errors) {
+                updatePrintErrors(data.print_errors);
+            }
         }
 
         function updatePrinterStatuses(printers) {
@@ -1744,6 +1765,43 @@
                         console.log(`Updated mapping for printer ${printerId}, toolhead ${toolheadId}:`, mapping);
                     }
                 });
+            });
+        }
+
+        function updatePrintErrors(printErrors) {
+            const container = document.getElementById('print-errors-container');
+            if (!container) return;
+            
+            // Clear existing errors
+            container.innerHTML = '';
+            
+            if (printErrors.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            container.style.display = 'block';
+            
+            // Add each error
+            printErrors.forEach(error => {
+                const errorElement = document.createElement('div');
+                errorElement.className = 'print-error';
+                errorElement.setAttribute('data-error-id', error.id);
+                errorElement.style.cssText = 'background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 20px; margin: 20px 0; border-radius: 8px;';
+                
+                const timestamp = new Date(error.timestamp).toLocaleString();
+                
+                errorElement.innerHTML = `
+                    <h4 style="margin-top: 0;">⚠️ Print Processing Failed</h4>
+                    <p><strong>Printer:</strong> ${error.printer_name}</p>
+                    <p><strong>File:</strong> ${error.filename}</p>
+                    <p><strong>Time:</strong> ${timestamp}</p>
+                    <p><strong>Error:</strong> ${error.error}</p>
+                    <p><strong>Action Required:</strong> Please update Spoolman manually with the correct filament usage for this print.</p>
+                    <button class="btn" onclick="acknowledgeError('${error.id}')" style="background: #dc3545; margin-top: 10px;">Acknowledge</button>
+                `;
+                
+                container.appendChild(errorElement);
             });
         }
 
@@ -1922,6 +1980,41 @@
             content.classList.remove('show');
             button.classList.remove('open');
             if (arrow) arrow.classList.remove('open');
+        }
+
+        // Acknowledge print error
+        async function acknowledgeError(errorId) {
+            try {
+                const response = await fetch(`/api/print-errors/${errorId}/acknowledge`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (response.ok) {
+                    // Remove the error from the UI
+                    const errorElement = document.querySelector(`[data-error-id="${errorId}"]`);
+                    if (errorElement) {
+                        errorElement.remove();
+                    }
+                    
+                    // Check if there are any remaining errors
+                    const remainingErrors = document.querySelectorAll('.print-error');
+                    if (remainingErrors.length === 0) {
+                        const container = document.getElementById('print-errors-container');
+                        if (container) {
+                            container.style.display = 'none';
+                        }
+                    }
+                } else {
+                    const errorData = await response.json();
+                    alert('Failed to acknowledge error: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error acknowledging print error:', error);
+                alert('Failed to acknowledge error: ' + error.message);
+            }
         }
 
         // Initialize WebSocket connection when page loads

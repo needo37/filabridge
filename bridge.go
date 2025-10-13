@@ -19,7 +19,9 @@ type FilamentBridge struct {
 	spoolman       *SpoolmanClient
 	db             *sql.DB
 	wasPrinting    map[string]bool
-	currentJobFile map[string]string // Store current job filename per printer
+	currentJobFile map[string]string     // Store current job filename per printer
+	printErrors    map[string]PrintError // Store print processing errors
+	errorMutex     sync.RWMutex
 	mutex          sync.RWMutex
 }
 
@@ -43,6 +45,16 @@ type PrintHistory struct {
 	JobName       string    `json:"job_name"`
 }
 
+// PrintError represents a failed print processing attempt
+type PrintError struct {
+	ID           string    `json:"id"`
+	PrinterName  string    `json:"printer_name"`
+	Filename     string    `json:"filename"`
+	Error        string    `json:"error"`
+	Timestamp    time.Time `json:"timestamp"`
+	Acknowledged bool      `json:"acknowledged"`
+}
+
 // PrinterStatus represents the current status of all printers
 type PrinterStatus struct {
 	Printers         map[string]PrinterData             `json:"printers"`
@@ -63,6 +75,7 @@ func NewFilamentBridge(config *Config) (*FilamentBridge, error) {
 		spoolman:       NewSpoolmanClient(DefaultSpoolmanURL), // Default URL, will be updated
 		wasPrinting:    make(map[string]bool),
 		currentJobFile: make(map[string]string),
+		printErrors:    make(map[string]PrintError),
 	}
 
 	// Initialize database
@@ -635,53 +648,94 @@ func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, file
 	// Create PrusaLink client for this printer
 	prusaClient := NewPrusaLinkClient(config.IPAddress, config.APIKey)
 
-	// Always use G-code analysis since PrusaLink doesn't provide filament usage data
-	var filamentUsage map[int]float64
+	// Use the filename parameter (stored when print started)
+	if filename == "" {
+		errorMsg := "No filename available for print processing"
+		b.addPrintError(printerName, "unknown", errorMsg)
+		return fmt.Errorf(errorMsg)
+	}
 
 	// Download and parse the .bgcode file for filament usage
-	log.Printf("Analyzing .bgcode file for filament usage")
+	log.Printf("Analyzing .bgcode file for filament usage: %s", filename)
 
-	// Use the filename parameter (stored when print started)
-	if filename != "" {
-		log.Printf("Downloading .bgcode file: %s", filename)
-		gcodeContent, err := prusaClient.GetGcodeFile(filename)
-		if err != nil {
-			log.Printf("Error downloading G-code file %s: %v", filename, err)
-			// Use rough estimation as last resort
-			filamentUsage = b.estimateFilamentUsage(config.Toolheads)
-		} else {
-			log.Printf("Successfully downloaded .bgcode file, parsing for filament usage...")
-			filamentUsage, err = prusaClient.ParseGcodeFilamentUsage(gcodeContent)
-			if err != nil {
-				log.Printf("Error parsing G-code for filament usage: %v", err)
-				filamentUsage = b.estimateFilamentUsage(config.Toolheads)
-			} else {
-				log.Printf("Successfully parsed .bgcode file for filament usage")
-			}
-		}
-	} else {
-		log.Printf("No filename available, using rough estimation")
-		filamentUsage = b.estimateFilamentUsage(config.Toolheads)
+	// Download with retry logic
+	gcodeContent, err := prusaClient.GetGcodeFileWithRetry(filename)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to download G-code file after retries: %v", err)
+		b.addPrintError(printerName, filename, errorMsg)
+		return fmt.Errorf(errorMsg)
 	}
+
+	// Parse the downloaded file
+	filamentUsage, err := prusaClient.ParseGcodeFilamentUsage(gcodeContent)
+	if err != nil {
+		errorMsg := fmt.Sprintf("Failed to parse G-code for filament usage: %v", err)
+		b.addPrintError(printerName, filename, errorMsg)
+		return fmt.Errorf(errorMsg)
+	}
+
+	// Check if we got any filament usage data
+	if len(filamentUsage) == 0 {
+		errorMsg := "No filament usage data found in G-code file"
+		b.addPrintError(printerName, filename, errorMsg)
+		return fmt.Errorf(errorMsg)
+	}
+
+	log.Printf("Successfully parsed .bgcode file for filament usage: %+v", filamentUsage)
 
 	// Process filament usage using helper function
 	if err := b.processFilamentUsage(printerName, filamentUsage, filename); err != nil {
 		log.Printf("Error processing filament usage: %v", err)
+		return err
 	}
 
 	return nil
 }
 
-// estimateFilamentUsage provides a rough estimation when no accurate data is available
-func (b *FilamentBridge) estimateFilamentUsage(toolheadCount int) map[int]float64 {
-	// Very rough estimation: 5g per toolhead
-	// This is a fallback when no accurate data is available
-	usage := make(map[int]float64)
-	for i := 0; i < toolheadCount; i++ {
-		usage[i] = DefaultFilamentEstimate // 5g per toolhead as rough estimate
+// GetPrintErrors returns all unacknowledged print errors
+func (b *FilamentBridge) GetPrintErrors() []PrintError {
+	b.errorMutex.RLock()
+	defer b.errorMutex.RUnlock()
+
+	var errors []PrintError
+	for _, err := range b.printErrors {
+		if !err.Acknowledged {
+			errors = append(errors, err)
+		}
 	}
-	log.Printf("Using rough filament estimation: %.1fg per toolhead", DefaultFilamentEstimate)
-	return usage
+	return errors
+}
+
+// AcknowledgePrintError marks a print error as acknowledged
+func (b *FilamentBridge) AcknowledgePrintError(errorID string) error {
+	b.errorMutex.Lock()
+	defer b.errorMutex.Unlock()
+
+	if err, exists := b.printErrors[errorID]; exists {
+		err.Acknowledged = true
+		b.printErrors[errorID] = err
+		return nil
+	}
+	return fmt.Errorf("print error not found: %s", errorID)
+}
+
+// addPrintError adds a new print error
+func (b *FilamentBridge) addPrintError(printerName, filename, errorMsg string) {
+	b.errorMutex.Lock()
+	defer b.errorMutex.Unlock()
+
+	errorID := fmt.Sprintf("%s_%s_%d", printerName, filename, time.Now().Unix())
+	b.printErrors[errorID] = PrintError{
+		ID:           errorID,
+		PrinterName:  printerName,
+		Filename:     filename,
+		Error:        errorMsg,
+		Timestamp:    time.Now(),
+		Acknowledged: false,
+	}
+
+	log.Printf("⚠️  Print processing failed for %s (%s): %s - Manual Spoolman update required",
+		printerName, filename, errorMsg)
 }
 
 // GetStatus gets current status of all printers and mappings

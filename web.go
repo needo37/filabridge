@@ -50,6 +50,7 @@ type WebSocketMessage struct {
 	Printers         map[string]PrinterData             `json:"printers"`
 	Spools           []SpoolmanSpool                    `json:"spools"`
 	ToolheadMappings map[string]map[int]ToolheadMapping `json:"toolhead_mappings"`
+	PrintErrors      []PrintError                       `json:"print_errors,omitempty"`
 }
 
 // NewWebServer creates a new web server with Gin
@@ -118,6 +119,8 @@ func (ws *WebServer) setupRoutes() {
 		api.PUT("/printers/:id", ws.updatePrinterHandler)
 		api.DELETE("/printers/:id", ws.deletePrinterHandler)
 		api.POST("/detect_printer", ws.detectPrinterHandler)
+		api.GET("/print-errors", ws.getPrintErrorsHandler)
+		api.POST("/print-errors/:id/acknowledge", ws.acknowledgePrintErrorHandler)
 	}
 
 	// WebSocket endpoint
@@ -176,6 +179,9 @@ func (ws *WebServer) BroadcastStatus() {
 		spools = []SpoolmanSpool{}
 	}
 
+	// Get print errors
+	printErrors := ws.bridge.GetPrintErrors()
+
 	// Create message
 	message := WebSocketMessage{
 		Type:             "status_update",
@@ -183,6 +189,7 @@ func (ws *WebServer) BroadcastStatus() {
 		Printers:         status.Printers,
 		Spools:           spools,
 		ToolheadMappings: status.ToolheadMappings,
+		PrintErrors:      printErrors,
 	}
 
 	// Marshal to JSON
@@ -326,10 +333,16 @@ func (ws *WebServer) dashboardHandler(c *gin.Context) {
 
 	hasErrors := !spoolmanConnected || hasConnectionErrors(status)
 
+	// Get print errors
+	printErrors := ws.bridge.GetPrintErrors()
+	hasPrintErrors := len(printErrors) > 0
+
 	c.HTML(http.StatusOK, "index.html", gin.H{
 		"Status":            status,
 		"Spools":            spools,
 		"HasErrors":         hasErrors,
+		"HasPrintErrors":    hasPrintErrors,
+		"PrintErrors":       printErrors,
 		"IsFirstRun":        isFirstRun,
 		"Printers":          ws.bridge.config.Printers,
 		"SpoolmanConnected": spoolmanConnected,
@@ -876,6 +889,30 @@ func (ws *WebServer) testPrintCompleteHandler(c *gin.Context) {
 		"job":            request.JobName,
 		"filament_usage": request.FilamentUsage,
 	})
+}
+
+// getPrintErrorsHandler returns all unacknowledged print errors
+func (ws *WebServer) getPrintErrorsHandler(c *gin.Context) {
+	errors := ws.bridge.GetPrintErrors()
+	c.JSON(http.StatusOK, gin.H{
+		"errors": errors,
+	})
+}
+
+// acknowledgePrintErrorHandler acknowledges a print error
+func (ws *WebServer) acknowledgePrintErrorHandler(c *gin.Context) {
+	errorID := c.Param("id")
+	if errorID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error ID is required"})
+		return
+	}
+
+	if err := ws.bridge.AcknowledgePrintError(errorID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Error acknowledged"})
 }
 
 // reloadBridgeConfig reloads the bridge configuration after changes

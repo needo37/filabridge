@@ -11,11 +11,10 @@ const (
 
 // Default configuration values
 const (
-	DefaultSpoolmanURL      = "http://localhost:7912"
-	DefaultWebPort          = "5000"
-	DefaultPollInterval     = 30
-	DefaultFilamentEstimate = 5.0 // grams per toolhead fallback estimate
-	DefaultDBFileName       = "filabridge.db"
+	DefaultSpoolmanURL  = "http://localhost:7912"
+	DefaultWebPort      = "5000"
+	DefaultPollInterval = 30
+	DefaultDBFileName   = "filabridge.db"
 )
 
 // Database configuration keys
@@ -29,8 +28,9 @@ const (
 
 // HTTP timeouts
 const (
-	PrusaLinkTimeout = 10 // seconds
-	SpoolmanTimeout  = 30 // seconds
+	PrusaLinkTimeout             = 10 // seconds
+	PrusaLinkFileDownloadTimeout = 30 // seconds for file downloads
+	SpoolmanTimeout              = 30 // seconds
 )
 
 // Printer model detection patterns

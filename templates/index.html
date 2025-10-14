@@ -2149,8 +2149,22 @@
                         }
                     }
                 } else {
-                    const errorData = await response.json();
-                    alert('Failed to acknowledge error: ' + errorData.error);
+                    // Check if response is JSON
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        try {
+                            const errorData = await response.json();
+                            alert('Failed to acknowledge error: ' + (errorData.error || 'Unknown error'));
+                        } catch (jsonError) {
+                            console.error('Failed to parse error response as JSON:', jsonError);
+                            alert('Failed to acknowledge error: Invalid server response');
+                        }
+                    } else {
+                        // Response is not JSON, get text
+                        const errorText = await response.text();
+                        console.error('Non-JSON error response:', errorText);
+                        alert('Failed to acknowledge error: ' + (errorText || 'Unknown error'));
+                    }
                 }
             } catch (error) {
                 console.error('Error acknowledging print error:', error);

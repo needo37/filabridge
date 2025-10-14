@@ -56,7 +56,28 @@ type WebSocketMessage struct {
 // NewWebServer creates a new web server with Gin
 func NewWebServer(bridge *FilamentBridge) *WebServer {
 	gin.SetMode(gin.ReleaseMode)
-	router := gin.Default()
+	router := gin.New()
+
+	// Add middleware
+	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
+
+	// Add custom recovery middleware for API routes to ensure JSON responses
+	router.Use(func(c *gin.Context) {
+		defer func() {
+			if err := recover(); err != nil {
+				// Check if this is an API route
+				if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+					c.Abort()
+				} else {
+					// For non-API routes, use default recovery behavior
+					c.AbortWithStatus(http.StatusInternalServerError)
+				}
+			}
+		}()
+		c.Next()
+	})
 
 	// Create WebSocket hub
 	wsHub := &WebSocketHub{
@@ -901,6 +922,14 @@ func (ws *WebServer) getPrintErrorsHandler(c *gin.Context) {
 
 // acknowledgePrintErrorHandler acknowledges a print error
 func (ws *WebServer) acknowledgePrintErrorHandler(c *gin.Context) {
+	// Ensure we always return JSON
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Panic in acknowledgePrintErrorHandler: %v", r)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		}
+	}()
+
 	errorID := c.Param("id")
 	if errorID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Error ID is required"})

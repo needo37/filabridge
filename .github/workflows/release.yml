@@ -98,28 +98,46 @@ jobs:
             COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
           fi
           
-          # Create a simple changelog entry
-          cat > CHANGELOG.md << 'EOF'
+          # Read existing CHANGELOG.md if it exists
+          if [ -f "CHANGELOG.md" ]; then
+            # Extract header (first 8 lines) and body (rest)
+            head -n 8 CHANGELOG.md > /tmp/header.txt
+            tail -n +9 CHANGELOG.md > /tmp/body.txt
+          else
+            # Create header if CHANGELOG.md doesn't exist
+            cat > /tmp/header.txt << 'EOF'
           # Changelog
           
           All notable changes to FilaBridge will be documented in this file.
           
           The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
           and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+          EOF
+            touch /tmp/body.txt
+          fi
           
+          # Create new version entry
+          cat > /tmp/new_entry.txt << 'EOF'
           ## [VERSION_PLACEHOLDER] - DATE_PLACEHOLDER
           
           ### Added
           COMMITS_PLACEHOLDER
+          
           EOF
             
-          # Replace placeholders
-          sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" CHANGELOG.md
-          sed -i "s/DATE_PLACEHOLDER/$(date +%Y-%m-%d)/g" CHANGELOG.md
+          # Replace placeholders in new entry
+          sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" /tmp/new_entry.txt
+          sed -i "s/DATE_PLACEHOLDER/$(date +%Y-%m-%d)/g" /tmp/new_entry.txt
           # Use a different approach for commits to handle newlines and special characters
           echo "$COMMITS" > /tmp/commits.txt
-          sed -i '/COMMITS_PLACEHOLDER/r /tmp/commits.txt' CHANGELOG.md
-          sed -i 's/COMMITS_PLACEHOLDER//' CHANGELOG.md
+          sed -i '/COMMITS_PLACEHOLDER/r /tmp/commits.txt' /tmp/new_entry.txt
+          sed -i 's/COMMITS_PLACEHOLDER//' /tmp/new_entry.txt
+          
+          # Combine header + new entry + existing body
+          cat /tmp/header.txt /tmp/new_entry.txt /tmp/body.txt > CHANGELOG.md
+          
+          # Clean up temp files
+          rm -f /tmp/header.txt /tmp/body.txt /tmp/new_entry.txt /tmp/commits.txt
           
           # Show what was generated
           echo "Generated changelog:"
@@ -158,52 +176,82 @@ jobs:
             COMMITS=$(git log --pretty=format:"%s" $LAST_TAG..HEAD)
           fi
           
-          # Filter out release commits and format by type
-          FEATURES=""
-          FIXES=""
-          CHANGES=""
-          DOCS=""
+          # Initialize arrays for different commit types
+          declare -a FEATURES=()
+          declare -a FIXES=()
+          declare -a CHANGES=()
+          declare -a DOCS=()
+          declare -a OTHER=()
           
+          # Process each commit
           while IFS= read -r commit; do
-            # Skip release commits
-            if [[ "$commit" =~ ^(chore\(release\)|chore: update changelog) ]]; then
+            # Skip automated changelog update commits
+            if [[ "$commit" =~ ^chore\(release\):\ update\ changelog\ for ]]; then
               continue
             fi
             
-            # Categorize commits
+            # Categorize commits by conventional commit prefixes
             if [[ "$commit" =~ ^feat: ]]; then
-              FEATURES="${FEATURES}- ${commit#feat: }\n"
+              FEATURES+=("- ${commit#feat: }")
             elif [[ "$commit" =~ ^(fix|bug): ]]; then
-              FIXES="${FIXES}- ${commit#fix: }\n"
-              FIXES="${FIXES//bug: /}"
+              # Remove both fix: and bug: prefixes
+              clean_commit="${commit#fix: }"
+              clean_commit="${clean_commit#bug: }"
+              FIXES+=("- $clean_commit")
             elif [[ "$commit" =~ ^(chore|refactor|style): ]]; then
-              CHANGES="${CHANGES}- ${commit#chore: }\n"
-              CHANGES="${CHANGES//refactor: /}"
-              CHANGES="${CHANGES//style: /}"
+              # Remove prefixes for different types
+              clean_commit="${commit#chore: }"
+              clean_commit="${clean_commit#refactor: }"
+              clean_commit="${clean_commit#style: }"
+              CHANGES+=("- $clean_commit")
             elif [[ "$commit" =~ ^docs: ]]; then
-              DOCS="${DOCS}- ${commit#docs: }\n"
+              DOCS+=("- ${commit#docs: }")
+            else
+              # Include any commit that doesn't match conventional commit format
+              OTHER+=("- $commit")
             fi
           done <<< "$COMMITS"
           
-          # Build the changelog
+          # Build the changelog sections
           CHANGELOG=""
-          if [ -n "$FEATURES" ]; then
-            CHANGELOG="${CHANGELOG}### Added\n${FEATURES}\n"
-          fi
-          if [ -n "$FIXES" ]; then
-            CHANGELOG="${CHANGELOG}### Fixed\n${FIXES}\n"
-          fi
-          if [ -n "$CHANGES" ]; then
-            CHANGELOG="${CHANGELOG}### Changed\n${CHANGES}\n"
-          fi
-          if [ -n "$DOCS" ]; then
-            CHANGELOG="${CHANGELOG}### Documentation\n${DOCS}\n"
+          
+          if [ ${#FEATURES[@]} -gt 0 ]; then
+            CHANGELOG="${CHANGELOG}### Added"$'\n'
+            printf '%s\n' "${FEATURES[@]}" >> /tmp/features.txt
+            CHANGELOG="${CHANGELOG}$(cat /tmp/features.txt)"$'\n\n'
+            rm -f /tmp/features.txt
           fi
           
-          # If still empty, use a generic message
-          if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="- Automated changelog generation"
+          if [ ${#FIXES[@]} -gt 0 ]; then
+            CHANGELOG="${CHANGELOG}### Fixed"$'\n'
+            printf '%s\n' "${FIXES[@]}" >> /tmp/fixes.txt
+            CHANGELOG="${CHANGELOG}$(cat /tmp/fixes.txt)"$'\n\n'
+            rm -f /tmp/fixes.txt
           fi
+          
+          if [ ${#CHANGES[@]} -gt 0 ]; then
+            CHANGELOG="${CHANGELOG}### Changed"$'\n'
+            printf '%s\n' "${CHANGES[@]}" >> /tmp/changes.txt
+            CHANGELOG="${CHANGELOG}$(cat /tmp/changes.txt)"$'\n\n'
+            rm -f /tmp/changes.txt
+          fi
+          
+          if [ ${#DOCS[@]} -gt 0 ]; then
+            CHANGELOG="${CHANGELOG}### Documentation"$'\n'
+            printf '%s\n' "${DOCS[@]}" >> /tmp/docs.txt
+            CHANGELOG="${CHANGELOG}$(cat /tmp/docs.txt)"$'\n\n'
+            rm -f /tmp/docs.txt
+          fi
+          
+          if [ ${#OTHER[@]} -gt 0 ]; then
+            CHANGELOG="${CHANGELOG}### Other"$'\n'
+            printf '%s\n' "${OTHER[@]}" >> /tmp/other.txt
+            CHANGELOG="${CHANGELOG}$(cat /tmp/other.txt)"$'\n\n'
+            rm -f /tmp/other.txt
+          fi
+          
+          # Remove trailing newlines
+          CHANGELOG=$(echo -n "$CHANGELOG" | sed 's/\n*$//')
           
           echo "Generated changelog:"
           echo "$CHANGELOG"
@@ -211,7 +259,7 @@ jobs:
           # Output the changelog
           {
             echo "CHANGELOG<<EOF"
-            echo -e "$CHANGELOG"
+            echo "$CHANGELOG"
             echo "EOF"
           } >> $GITHUB_OUTPUT
 

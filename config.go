@@ -31,11 +31,14 @@ type FilamentSpool struct {
 
 // Config holds all configuration for the application
 type Config struct {
-	SpoolmanURL  string
-	PollInterval time.Duration
-	DBFile       string
-	WebPort      string
-	Printers     map[string]PrinterConfig // Key is printer ID, value is printer config
+	SpoolmanURL                  string
+	PollInterval                 time.Duration
+	DBFile                       string
+	WebPort                      string
+	PrusaLinkTimeout             int
+	PrusaLinkFileDownloadTimeout int
+	SpoolmanTimeout              int
+	Printers                     map[string]PrinterConfig // Key is printer ID, value is printer config
 }
 
 // LoadConfig loads configuration from database
@@ -54,12 +57,37 @@ func LoadConfig(bridge *FilamentBridge) (*Config, error) {
 		}
 	}
 
+	// Parse timeout values
+	prusaLinkTimeout := PrusaLinkTimeout
+	if timeoutStr, exists := configValues[ConfigKeyPrusaLinkTimeout]; exists {
+		if parsed, err := strconv.Atoi(timeoutStr); err == nil {
+			prusaLinkTimeout = parsed
+		}
+	}
+
+	prusaLinkFileDownloadTimeout := PrusaLinkFileDownloadTimeout
+	if timeoutStr, exists := configValues[ConfigKeyPrusaLinkFileDownloadTimeout]; exists {
+		if parsed, err := strconv.Atoi(timeoutStr); err == nil {
+			prusaLinkFileDownloadTimeout = parsed
+		}
+	}
+
+	spoolmanTimeout := SpoolmanTimeout
+	if timeoutStr, exists := configValues[ConfigKeySpoolmanTimeout]; exists {
+		if parsed, err := strconv.Atoi(timeoutStr); err == nil {
+			spoolmanTimeout = parsed
+		}
+	}
+
 	config := &Config{
-		SpoolmanURL:  configValues[ConfigKeySpoolmanURL],
-		PollInterval: time.Duration(pollInterval) * time.Second,
-		DBFile:       getDBFilePath(),
-		WebPort:      configValues[ConfigKeyWebPort],
-		Printers:     make(map[string]PrinterConfig),
+		SpoolmanURL:                  configValues[ConfigKeySpoolmanURL],
+		PollInterval:                 time.Duration(pollInterval) * time.Second,
+		DBFile:                       getDBFilePath(),
+		WebPort:                      configValues[ConfigKeyWebPort],
+		PrusaLinkTimeout:             prusaLinkTimeout,
+		PrusaLinkFileDownloadTimeout: prusaLinkFileDownloadTimeout,
+		SpoolmanTimeout:              spoolmanTimeout,
+		Printers:                     make(map[string]PrinterConfig),
 	}
 
 	// Load individual printer configurations from database

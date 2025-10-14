@@ -75,11 +75,11 @@ type SpoolmanError struct {
 }
 
 // NewSpoolmanClient creates a new Spoolman client
-func NewSpoolmanClient(baseURL string) *SpoolmanClient {
+func NewSpoolmanClient(baseURL string, timeout int) *SpoolmanClient {
 	return &SpoolmanClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: SpoolmanTimeout * time.Second,
+			Timeout: time.Duration(timeout) * time.Second,
 			Transport: &http.Transport{
 				MaxIdleConns:        10,
 				MaxIdleConnsPerHost: 2,

@@ -72,7 +72,7 @@ type PrinterData struct {
 func NewFilamentBridge(config *Config) (*FilamentBridge, error) {
 	bridge := &FilamentBridge{
 		config:         config,
-		spoolman:       NewSpoolmanClient(DefaultSpoolmanURL), // Default URL, will be updated
+		spoolman:       NewSpoolmanClient(DefaultSpoolmanURL, SpoolmanTimeout), // Default URL and timeout, will be updated
 		wasPrinting:    make(map[string]bool),
 		currentJobFile: make(map[string]string),
 		printErrors:    make(map[string]PrintError),
@@ -83,9 +83,9 @@ func NewFilamentBridge(config *Config) (*FilamentBridge, error) {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
-	// Update Spoolman URL if config is provided
+	// Update Spoolman URL and timeout if config is provided
 	if config != nil && config.SpoolmanURL != "" {
-		bridge.spoolman = NewSpoolmanClient(config.SpoolmanURL)
+		bridge.spoolman = NewSpoolmanClient(config.SpoolmanURL, config.SpoolmanTimeout)
 	}
 
 	return bridge, nil
@@ -163,11 +163,14 @@ func (b *FilamentBridge) initDatabase() error {
 // initializeDefaultConfig sets up default configuration values
 func (b *FilamentBridge) initializeDefaultConfig() error {
 	defaultConfigs := map[string]string{
-		ConfigKeyPrinterIPs:   "", // Comma-separated list of printer IP addresses
-		ConfigKeyAPIKey:       "", // PrusaLink API key for authentication
-		ConfigKeySpoolmanURL:  DefaultSpoolmanURL,
-		ConfigKeyPollInterval: fmt.Sprintf("%d", DefaultPollInterval),
-		ConfigKeyWebPort:      DefaultWebPort,
+		ConfigKeyPrinterIPs:                   "", // Comma-separated list of printer IP addresses
+		ConfigKeyAPIKey:                       "", // PrusaLink API key for authentication
+		ConfigKeySpoolmanURL:                  DefaultSpoolmanURL,
+		ConfigKeyPollInterval:                 fmt.Sprintf("%d", DefaultPollInterval),
+		ConfigKeyWebPort:                      DefaultWebPort,
+		ConfigKeyPrusaLinkTimeout:             fmt.Sprintf("%d", PrusaLinkTimeout),
+		ConfigKeyPrusaLinkFileDownloadTimeout: fmt.Sprintf("%d", PrusaLinkFileDownloadTimeout),
+		ConfigKeySpoolmanTimeout:              fmt.Sprintf("%d", SpoolmanTimeout),
 	}
 
 	// Check if this is a fresh installation by checking if any config exists
@@ -196,11 +199,14 @@ func (b *FilamentBridge) initializeDefaultConfig() error {
 // getConfigDescription returns a description for a configuration key
 func getConfigDescription(key string) string {
 	descriptions := map[string]string{
-		ConfigKeyPrinterIPs:   "Comma-separated list of printer IP addresses for PrusaLink",
-		ConfigKeyAPIKey:       "PrusaLink API key for authentication",
-		ConfigKeySpoolmanURL:  "URL of Spoolman instance",
-		ConfigKeyPollInterval: "Polling interval in seconds",
-		ConfigKeyWebPort:      "Port for web interface",
+		ConfigKeyPrinterIPs:                   "Comma-separated list of printer IP addresses for PrusaLink",
+		ConfigKeyAPIKey:                       "PrusaLink API key for authentication",
+		ConfigKeySpoolmanURL:                  "URL of Spoolman instance",
+		ConfigKeyPollInterval:                 "Polling interval in seconds",
+		ConfigKeyWebPort:                      "Port for web interface",
+		ConfigKeyPrusaLinkTimeout:             "PrusaLink API timeout in seconds",
+		ConfigKeyPrusaLinkFileDownloadTimeout: "PrusaLink file download timeout in seconds",
+		ConfigKeySpoolmanTimeout:              "Spoolman API timeout in seconds",
 	}
 	if desc, exists := descriptions[key]; exists {
 		return desc
@@ -316,11 +322,14 @@ func (b *FilamentBridge) GetConfigSnapshot() *Config {
 
 	// Create a shallow copy of the config
 	configCopy := &Config{
-		SpoolmanURL:  b.config.SpoolmanURL,
-		PollInterval: b.config.PollInterval,
-		DBFile:       b.config.DBFile,
-		WebPort:      b.config.WebPort,
-		Printers:     make(map[string]PrinterConfig),
+		SpoolmanURL:                  b.config.SpoolmanURL,
+		PollInterval:                 b.config.PollInterval,
+		DBFile:                       b.config.DBFile,
+		WebPort:                      b.config.WebPort,
+		PrusaLinkTimeout:             b.config.PrusaLinkTimeout,
+		PrusaLinkFileDownloadTimeout: b.config.PrusaLinkFileDownloadTimeout,
+		SpoolmanTimeout:              b.config.SpoolmanTimeout,
+		Printers:                     make(map[string]PrinterConfig),
 	}
 
 	// Copy printer configs
@@ -365,7 +374,7 @@ func (b *FilamentBridge) UpdateConfig(config *Config) error {
 	defer b.mutex.Unlock()
 
 	b.config = config
-	b.spoolman = NewSpoolmanClient(config.SpoolmanURL)
+	b.spoolman = NewSpoolmanClient(config.SpoolmanURL, config.SpoolmanTimeout)
 
 	return nil
 }
@@ -559,7 +568,7 @@ func (b *FilamentBridge) MonitorPrinters() {
 // monitorPrusaLink monitors a single printer using PrusaLink API
 func (b *FilamentBridge) monitorPrusaLink(printerID string, config PrinterConfig) error {
 	log.Printf("Starting monitoring for printer %s (%s) at %s", printerID, config.IPAddress, config.Name)
-	client := NewPrusaLinkClient(config.IPAddress, config.APIKey)
+	client := NewPrusaLinkClient(config.IPAddress, config.APIKey, b.config.PrusaLinkTimeout, b.config.PrusaLinkFileDownloadTimeout)
 
 	status, err := client.GetStatus()
 	if err != nil {
@@ -646,7 +655,7 @@ func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, file
 	printerName := resolvePrinterName(config)
 
 	// Create PrusaLink client for this printer
-	prusaClient := NewPrusaLinkClient(config.IPAddress, config.APIKey)
+	prusaClient := NewPrusaLinkClient(config.IPAddress, config.APIKey, b.config.PrusaLinkTimeout, b.config.PrusaLinkFileDownloadTimeout)
 
 	// Use the filename parameter (stored when print started)
 	if filename == "" {
@@ -659,7 +668,7 @@ func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, file
 	log.Printf("Analyzing .bgcode file for filament usage: %s", filename)
 
 	// Download with retry logic
-	gcodeContent, err := prusaClient.GetGcodeFileWithRetry(filename)
+	gcodeContent, err := prusaClient.GetGcodeFileWithRetry(filename, b.config.PrusaLinkFileDownloadTimeout)
 	if err != nil {
 		errorMsg := fmt.Sprintf("failed to download G-code file after retries: %v", err)
 		b.addPrintError(printerName, filename, errorMsg)
@@ -764,7 +773,7 @@ func (b *FilamentBridge) GetStatus() (*PrinterStatus, error) {
 				continue // Skip placeholder
 			}
 
-			client := NewPrusaLinkClient(printerConfig.IPAddress, printerConfig.APIKey)
+			client := NewPrusaLinkClient(printerConfig.IPAddress, printerConfig.APIKey, b.config.PrusaLinkTimeout, b.config.PrusaLinkFileDownloadTimeout)
 
 			// Use the configured printer name, not the hostname from PrusaLink
 			printerName := printerConfig.Name

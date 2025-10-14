@@ -634,7 +634,7 @@ func (ws *WebServer) updatePrinterHandler(c *gin.Context) {
 		log.Printf("🔍 [Auto-Detection] Detecting model for printer %s (IP: %s)", printerID, printerConfig.IPAddress)
 
 		// Create PrusaLink client for detection
-		client := NewPrusaLinkClient(printerConfig.IPAddress, printerConfig.APIKey)
+		client := NewPrusaLinkClient(printerConfig.IPAddress, printerConfig.APIKey, 10, 60) // Use default timeouts for detection
 
 		// Try to get printer info
 		printerInfo, err := client.GetPrinterInfo()
@@ -729,7 +729,7 @@ func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 	log.Printf("🔍 [Detection] Starting printer model detection for IP: %s", req.IPAddress)
 
 	// Create PrusaLink client
-	client := NewPrusaLinkClient(req.IPAddress, req.APIKey)
+	client := NewPrusaLinkClient(req.IPAddress, req.APIKey, 10, 60) // Use default timeouts for detection
 
 	// Try to get printer info, but don't fail if it times out
 	printerInfo, err := client.GetPrinterInfo()

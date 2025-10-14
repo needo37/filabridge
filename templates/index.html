@@ -263,6 +263,25 @@
             margin-top: 5px;
             display: block;
         }
+        .advanced-settings {
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        .help-text {
+            color: #ccc;
+            font-style: italic;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: rgba(255,193,7,0.1);
+            border-left: 3px solid #ffc107;
+            border-radius: 4px;
+        }
+        .timeout-settings {
+            display: grid;
+            gap: 15px;
+        }
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -687,6 +706,39 @@
                         <p>Loading configuration...</p>
                     </div>
                 </div>
+                
+                <!-- Advanced Settings Section -->
+                <div class="config-section">
+                    <h3>⚡ Advanced Settings</h3>
+                    <div class="advanced-settings">
+                        <p class="help-text">These settings are for advanced users with slow network connections or specific timeout requirements.</p>
+                        
+                        <div class="timeout-settings">
+                            <div class="form-group">
+                                <label for="prusalinkTimeout">PrusaLink API Timeout (seconds)</label>
+                                <input type="number" id="prusalinkTimeout" name="prusalink_timeout" min="5" max="300" value="10">
+                                <small>Timeout for PrusaLink API calls (default: 10s, recommended: 5-300s)</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="prusalinkFileDownloadTimeout">File Download Timeout (seconds)</label>
+                                <input type="number" id="prusalinkFileDownloadTimeout" name="prusalink_file_download_timeout" min="10" max="600" value="60">
+                                <small>Timeout for downloading .bgcode files (default: 60s, recommended: 10-600s)</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="spoolmanTimeout">Spoolman API Timeout (seconds)</label>
+                                <input type="number" id="spoolmanTimeout" name="spoolman_timeout" min="5" max="300" value="30">
+                                <small>Timeout for Spoolman API calls (default: 30s, recommended: 5-300s)</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <button class="btn" onclick="saveAdvancedSettings()">💾 Save Advanced Settings</button>
+                                <button class="btn btn-secondary" onclick="resetAdvancedSettings()">🔄 Reset to Defaults</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1091,6 +1143,68 @@
             .catch(error => {
                 alert('Error saving configuration: ' + error.message);
             });
+        }
+        
+        // Advanced Settings Functions
+        function loadAdvancedSettings() {
+            fetch('/api/config')
+                .then(response => response.json())
+                .then(config => {
+                    document.getElementById('prusalinkTimeout').value = config.prusalink_timeout || '10';
+                    document.getElementById('prusalinkFileDownloadTimeout').value = config.prusalink_file_download_timeout || '60';
+                    document.getElementById('spoolmanTimeout').value = config.spoolman_timeout || '30';
+                })
+                .catch(error => {
+                    console.error('Error loading advanced settings:', error);
+                });
+        }
+        
+        function saveAdvancedSettings() {
+            const config = {
+                prusalink_timeout: document.getElementById('prusalinkTimeout').value,
+                prusalink_file_download_timeout: document.getElementById('prusalinkFileDownloadTimeout').value,
+                spoolman_timeout: document.getElementById('spoolmanTimeout').value
+            };
+            
+            // Validate inputs
+            if (config.prusalink_timeout < 5 || config.prusalink_timeout > 300) {
+                alert('PrusaLink API timeout must be between 5 and 300 seconds');
+                return;
+            }
+            if (config.prusalink_file_download_timeout < 10 || config.prusalink_file_download_timeout > 600) {
+                alert('File download timeout must be between 10 and 600 seconds');
+                return;
+            }
+            if (config.spoolman_timeout < 5 || config.spoolman_timeout > 300) {
+                alert('Spoolman API timeout must be between 5 and 300 seconds');
+                return;
+            }
+            
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert('Error saving advanced settings: ' + data.error);
+                } else {
+                    alert('Advanced settings saved successfully! The application will restart to apply changes.');
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                alert('Error saving advanced settings: ' + error.message);
+            });
+        }
+        
+        function resetAdvancedSettings() {
+            if (confirm('Reset all timeout settings to their default values?')) {
+                document.getElementById('prusalinkTimeout').value = '10';
+                document.getElementById('prusalinkFileDownloadTimeout').value = '60';
+                document.getElementById('spoolmanTimeout').value = '30';
+            }
         }
         
         // Auto-map spool to toolhead when selected
@@ -1521,6 +1635,7 @@
             // Load configuration when settings tab is opened
             if (tabName === 'settings') {
                 loadConfiguration();
+                loadAdvancedSettings();
             }
         }
 

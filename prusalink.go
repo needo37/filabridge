@@ -91,12 +91,12 @@ type PrusaLinkInfo struct {
 }
 
 // NewPrusaLinkClient creates a new PrusaLink client
-func NewPrusaLinkClient(ipAddress, apiKey string) *PrusaLinkClient {
+func NewPrusaLinkClient(ipAddress, apiKey string, timeout, fileDownloadTimeout int) *PrusaLinkClient {
 	return &PrusaLinkClient{
 		baseURL: fmt.Sprintf("http://%s", ipAddress),
 		apiKey:  apiKey,
 		httpClient: &http.Client{
-			Timeout: PrusaLinkTimeout * time.Second,
+			Timeout: time.Duration(timeout) * time.Second,
 			Transport: &http.Transport{
 				MaxIdleConns:        10,
 				MaxIdleConnsPerHost: 2,
@@ -254,7 +254,7 @@ func (c *PrusaLinkClient) GetGcodeFile(filename string) ([]byte, error) {
 }
 
 // GetGcodeFileWithRetry downloads the G-code file with retry logic and exponential backoff
-func (c *PrusaLinkClient) GetGcodeFileWithRetry(filename string) ([]byte, error) {
+func (c *PrusaLinkClient) GetGcodeFileWithRetry(filename string, fileDownloadTimeout int) ([]byte, error) {
 	const maxRetries = 3
 	backoffDelays := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
 
@@ -265,7 +265,7 @@ func (c *PrusaLinkClient) GetGcodeFileWithRetry(filename string) ([]byte, error)
 
 		// Create a new client with extended timeout for file downloads
 		fileClient := &http.Client{
-			Timeout: time.Duration(PrusaLinkFileDownloadTimeout) * time.Second,
+			Timeout: time.Duration(fileDownloadTimeout) * time.Second,
 			Transport: &http.Transport{
 				MaxIdleConns:          10,
 				MaxIdleConnsPerHost:   2,

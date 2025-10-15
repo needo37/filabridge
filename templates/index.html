@@ -602,7 +602,7 @@
                             <h4 style="margin-top: 0;">⚠️ Print Processing Failed</h4>
                             <p><strong>Printer:</strong> {{.PrinterName}}</p>
                             <p><strong>File:</strong> {{.Filename}}</p>
-                            <p><strong>Time:</strong> {{.Timestamp.Format "2006-01-02 15:04:05"}}</p>
+                            <p><strong>Time:</strong> <span class="error-timestamp" data-timestamp="{{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}">{{.Timestamp.Format "2006-01-02 15:04:05"}}</span></p>
                             <p><strong>Error:</strong> {{.Error}}</p>
                             <p><strong>Action Required:</strong> Please update Spoolman manually with the correct filament usage for this print.</p>
                             <button class="btn" onclick="acknowledgeError('{{.ID}}')" style="background: #dc3545; margin-top: 10px;">Acknowledge</button>
@@ -2172,8 +2172,21 @@
             }
         }
 
+        // Convert server timestamps to local time
+        function convertTimestampsToLocal() {
+            const timestampElements = document.querySelectorAll('.error-timestamp');
+            timestampElements.forEach(element => {
+                const timestampData = element.getAttribute('data-timestamp');
+                if (timestampData) {
+                    const localTime = new Date(timestampData).toLocaleString();
+                    element.textContent = localTime;
+                }
+            });
+        }
+
         // Initialize WebSocket connection when page loads
         document.addEventListener('DOMContentLoaded', function() {
+            convertTimestampsToLocal();
             connectWebSocket();
         });
     </script>

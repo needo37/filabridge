@@ -2126,7 +2126,7 @@
         // Acknowledge print error
         async function acknowledgeError(errorId) {
             try {
-                const response = await fetch(`/api/print-errors/${errorId}/acknowledge`, {
+                const response = await fetch(`/api/print-errors/${encodeURIComponent(errorId)}/acknowledge`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

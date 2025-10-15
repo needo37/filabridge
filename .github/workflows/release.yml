@@ -90,13 +90,49 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/}
           echo "Generating changelog for version: $VERSION"
           
-          # Generate changelog from git commits since last tag
+          # Get commits since last tag, excluding release commits
           LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -z "$LAST_TAG" ]; then
-            COMMITS=$(git log --pretty=format:"- %s" HEAD)
+            COMMITS=$(git log --pretty=format:"%s" HEAD)
           else
-            COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
+            COMMITS=$(git log --pretty=format:"%s" $LAST_TAG..HEAD)
           fi
+          
+          # Initialize arrays for different commit types
+          declare -a FEATURES=()
+          declare -a FIXES=()
+          declare -a CHANGES=()
+          declare -a DOCS=()
+          declare -a OTHER=()
+          
+          # Process each commit
+          while IFS= read -r commit; do
+            # Skip automated changelog update commits
+            if [[ "$commit" =~ ^chore\(release\):\ update\ changelog\ for ]]; then
+              continue
+            fi
+            
+            # Categorize commits by conventional commit prefixes
+            if [[ "$commit" =~ ^feat: ]]; then
+              FEATURES+=("- ${commit#feat: }")
+            elif [[ "$commit" =~ ^(fix|bug): ]]; then
+              # Remove both fix: and bug: prefixes
+              clean_commit="${commit#fix: }"
+              clean_commit="${clean_commit#bug: }"
+              FIXES+=("- $clean_commit")
+            elif [[ "$commit" =~ ^(chore|refactor|style): ]]; then
+              # Remove prefixes for different types
+              clean_commit="${commit#chore: }"
+              clean_commit="${clean_commit#refactor: }"
+              clean_commit="${clean_commit#style: }"
+              CHANGES+=("- $clean_commit")
+            elif [[ "$commit" =~ ^docs: ]]; then
+              DOCS+=("- ${commit#docs: }")
+            else
+              # Include any commit that doesn't match conventional commit format
+              OTHER+=("- $commit")
+            fi
+          done <<< "$COMMITS"
           
           # Read existing CHANGELOG.md if it exists
           if [ -f "CHANGELOG.md" ]; then
@@ -116,28 +152,57 @@ jobs:
             touch /tmp/body.txt
           fi
           
-          # Create new version entry
+          # Build the new version entry
           cat > /tmp/new_entry.txt << 'EOF'
           ## [VERSION_PLACEHOLDER] - DATE_PLACEHOLDER
           
-          ### Added
-          COMMITS_PLACEHOLDER
-          
           EOF
-            
+          
           # Replace placeholders in new entry
           sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" /tmp/new_entry.txt
           sed -i "s/DATE_PLACEHOLDER/$(date +%Y-%m-%d)/g" /tmp/new_entry.txt
-          # Use a different approach for commits to handle newlines and special characters
-          echo "$COMMITS" > /tmp/commits.txt
-          sed -i '/COMMITS_PLACEHOLDER/r /tmp/commits.txt' /tmp/new_entry.txt
-          sed -i 's/COMMITS_PLACEHOLDER//' /tmp/new_entry.txt
+          
+          # Add categorized sections
+          if [ ${#FEATURES[@]} -gt 0 ]; then
+            echo "### Added" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+            printf '%s\n' "${FEATURES[@]}" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+          fi
+          
+          if [ ${#FIXES[@]} -gt 0 ]; then
+            echo "### Fixed" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+            printf '%s\n' "${FIXES[@]}" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+          fi
+          
+          if [ ${#CHANGES[@]} -gt 0 ]; then
+            echo "### Changed" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+            printf '%s\n' "${CHANGES[@]}" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+          fi
+          
+          if [ ${#DOCS[@]} -gt 0 ]; then
+            echo "### Documentation" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+            printf '%s\n' "${DOCS[@]}" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+          fi
+          
+          if [ ${#OTHER[@]} -gt 0 ]; then
+            echo "### Other" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+            printf '%s\n' "${OTHER[@]}" >> /tmp/new_entry.txt
+            echo "" >> /tmp/new_entry.txt
+          fi
           
           # Combine header + new entry + existing body
           cat /tmp/header.txt /tmp/new_entry.txt /tmp/body.txt > CHANGELOG.md
           
           # Clean up temp files
-          rm -f /tmp/header.txt /tmp/body.txt /tmp/new_entry.txt /tmp/commits.txt
+          rm -f /tmp/header.txt /tmp/body.txt /tmp/new_entry.txt
           
           # Show what was generated
           echo "Generated changelog:"

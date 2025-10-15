@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [v0.0.13] - 2025-10-15
+## [v0.0.14] - 2025-10-15
+
+### Added
+
+- fix: properly encode error ID in fetch request for acknowledging print errors
+- feat: add local time conversion for error timestamps in print processing notifications
+- chore(release): update CHANGELOG for v0.0.13, removing outdated v0.0.11 entry
+- fix: enhance print processing logic in FilamentBridge to prevent duplicate handling and improve state management
+- chore(release): update changelog for v0.0.13
+
 
 ### Added
 

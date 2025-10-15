@@ -15,14 +15,15 @@ import (
 
 // FilamentBridge manages the connection between PrusaLink and Spoolman
 type FilamentBridge struct {
-	config         *Config
-	spoolman       *SpoolmanClient
-	db             *sql.DB
-	wasPrinting    map[string]bool
-	currentJobFile map[string]string     // Store current job filename per printer
-	printErrors    map[string]PrintError // Store print processing errors
-	errorMutex     sync.RWMutex
-	mutex          sync.RWMutex
+	config           *Config
+	spoolman         *SpoolmanClient
+	db               *sql.DB
+	wasPrinting      map[string]bool
+	currentJobFile   map[string]string     // Store current job filename per printer
+	processingPrints map[string]bool       // Track prints being processed
+	printErrors      map[string]PrintError // Store print processing errors
+	errorMutex       sync.RWMutex
+	mutex            sync.RWMutex
 }
 
 // ToolheadMapping represents a mapping between a printer toolhead and a spool
@@ -71,11 +72,12 @@ type PrinterData struct {
 // NewFilamentBridge creates a new FilamentBridge instance
 func NewFilamentBridge(config *Config) (*FilamentBridge, error) {
 	bridge := &FilamentBridge{
-		config:         config,
-		spoolman:       NewSpoolmanClient(DefaultSpoolmanURL, SpoolmanTimeout), // Default URL and timeout, will be updated
-		wasPrinting:    make(map[string]bool),
-		currentJobFile: make(map[string]string),
-		printErrors:    make(map[string]PrintError),
+		config:           config,
+		spoolman:         NewSpoolmanClient(DefaultSpoolmanURL, SpoolmanTimeout), // Default URL and timeout, will be updated
+		wasPrinting:      make(map[string]bool),
+		currentJobFile:   make(map[string]string),
+		processingPrints: make(map[string]bool),
+		printErrors:      make(map[string]PrintError),
 	}
 
 	// Initialize database
@@ -621,21 +623,26 @@ func (b *FilamentBridge) monitorPrusaLink(printerID string, config PrinterConfig
 		log.Printf("🎉 Print finished detected for %s (%s): %s (state: %s, file: %s)",
 			config.IPAddress, printerID, jobName, currentState, filenameToUse)
 
-		// Immediately clear the flag to prevent duplicate processing
-		// Keep the filename for processing, but clear the flag
+		// Mark as processing to prevent filename from being cleared
 		b.mutex.Lock()
 		b.wasPrinting[printerID] = false
+		b.processingPrints[printerID] = true
 		b.mutex.Unlock()
 
 		// Now process the print (this takes a long time)
-		if err := b.handlePrusaLinkPrintFinished(config, filenameToUse); err != nil {
+		err := b.handlePrusaLinkPrintFinished(config, filenameToUse)
+
+		// Clear processing flag and filename after completion
+		b.mutex.Lock()
+		b.processingPrints[printerID] = false
+		if err == nil {
+			b.currentJobFile[printerID] = ""
+		}
+		b.mutex.Unlock()
+
+		if err != nil {
 			log.Printf("Error handling PrusaLink print finished: %v", err)
 		}
-
-		// Clear the stored filename after processing is complete
-		b.mutex.Lock()
-		b.currentJobFile[printerID] = ""
-		b.mutex.Unlock()
 	} else {
 		// Update state tracking - minimize lock scope
 		b.mutex.Lock()
@@ -650,8 +657,8 @@ func (b *FilamentBridge) monitorPrusaLink(printerID string, config PrinterConfig
 		// Update wasPrinting flag for NEXT cycle
 		b.wasPrinting[printerID] = currentState == StatePrinting
 
-		// Clear stored filename when print finishes
-		if currentState == StateIdle || currentState == StateFinished {
+		// Clear stored filename when print finishes (but only if not currently processing)
+		if (currentState == StateIdle || currentState == StateFinished) && !b.processingPrints[printerID] {
 			b.currentJobFile[printerID] = ""
 		}
 	}

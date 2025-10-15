@@ -33,7 +33,7 @@ const (
 const (
 	PrusaLinkTimeout             = 10 // seconds
 	PrusaLinkFileDownloadTimeout = 60 // seconds for file downloads (USB storage can be slow)
-	SpoolmanTimeout              = 30 // seconds
+	SpoolmanTimeout              = 10 // seconds
 )
 
 // Printer model detection patterns

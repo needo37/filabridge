@@ -608,8 +608,7 @@ func (b *FilamentBridge) monitorPrusaLink(printerID string, config PrinterConfig
 	log.Printf("Printer %s (%s): state=%s, wasPrinting=%v, job=%s, stored_file=%s",
 		config.IPAddress, printerID, currentState, wasPrinting, jobName, storedJobFile)
 
-	// SIMPLE LOGIC: Check if we just finished printing
-	// If we were printing in the previous cycle AND now we're finished, process it
+	// Check if print just finished
 	if (currentState == StateIdle || currentState == StateFinished) && wasPrinting {
 		// Use stored filename (should be available since we stored it when printing started)
 		filenameToUse := storedJobFile
@@ -622,27 +621,39 @@ func (b *FilamentBridge) monitorPrusaLink(printerID string, config PrinterConfig
 		log.Printf("🎉 Print finished detected for %s (%s): %s (state: %s, file: %s)",
 			config.IPAddress, printerID, jobName, currentState, filenameToUse)
 
+		// Immediately clear the flag to prevent duplicate processing
+		// Keep the filename for processing, but clear the flag
+		b.mutex.Lock()
+		b.wasPrinting[printerID] = false
+		b.mutex.Unlock()
+
+		// Now process the print (this takes a long time)
 		if err := b.handlePrusaLinkPrintFinished(config, filenameToUse); err != nil {
 			log.Printf("Error handling PrusaLink print finished: %v", err)
 		}
-	}
 
-	// Update state tracking - minimize lock scope
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	// Store the current job filename when printing starts (only if not already stored)
-	if currentState == StatePrinting && currentJobFilename != "" && storedJobFile == "" {
-		b.currentJobFile[printerID] = currentJobFilename
-		log.Printf("📁 Stored job filename for %s (%s): %s", config.IPAddress, printerID, currentJobFilename)
-	}
-
-	// Update wasPrinting flag for NEXT cycle
-	b.wasPrinting[printerID] = currentState == StatePrinting
-
-	// Clear stored filename when print finishes
-	if currentState == StateIdle || currentState == StateFinished {
+		// Clear the stored filename after processing is complete
+		b.mutex.Lock()
 		b.currentJobFile[printerID] = ""
+		b.mutex.Unlock()
+	} else {
+		// Update state tracking - minimize lock scope
+		b.mutex.Lock()
+		defer b.mutex.Unlock()
+
+		// Store the current job filename when printing starts (only if not already stored)
+		if currentState == StatePrinting && currentJobFilename != "" && storedJobFile == "" {
+			b.currentJobFile[printerID] = currentJobFilename
+			log.Printf("📁 Stored job filename for %s (%s): %s", config.IPAddress, printerID, currentJobFilename)
+		}
+
+		// Update wasPrinting flag for NEXT cycle
+		b.wasPrinting[printerID] = currentState == StatePrinting
+
+		// Clear stored filename when print finishes
+		if currentState == StateIdle || currentState == StateFinished {
+			b.currentJobFile[printerID] = ""
+		}
 	}
 
 	return nil

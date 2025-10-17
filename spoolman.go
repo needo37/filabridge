@@ -169,6 +169,15 @@ func (c *SpoolmanClient) GetAllSpools() ([]SpoolmanSpool, error) {
 		spools[i] = c.normalizeSpoolData(spools[i])
 	}
 
+	// Filter out spools with 0g remaining weight
+	filteredSpools := make([]SpoolmanSpool, 0, len(spools))
+	for _, spool := range spools {
+		if spool.RemainingWeight > 0 {
+			filteredSpools = append(filteredSpools, spool)
+		}
+	}
+	spools = filteredSpools
+
 	// Sort spools: first alphabetically by display name, then by remaining weight (descending)
 	sort.Slice(spools, func(i, j int) bool {
 		// First sort by display name (Material - Brand - Name)

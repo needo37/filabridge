@@ -368,6 +368,7 @@ func (ws *WebServer) dashboardHandler(c *gin.Context) {
 		"Printers":          ws.bridge.config.Printers,
 		"SpoolmanConnected": spoolmanConnected,
 		"SpoolmanError":     spoolmanError,
+		"SpoolmanBaseURL":   ws.bridge.config.SpoolmanURL,
 	})
 }
 

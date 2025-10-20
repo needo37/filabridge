@@ -546,6 +546,30 @@
         .toolhead-label {
             color: #fff !important;
         }
+        
+        .edit-spool-btn {
+            background: #007bff; /* Fallback color */
+            color: white;
+            padding: 8px 12px;
+            border: 1px solid transparent;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            margin-left: 25px;
+        }
+        
+        .edit-spool-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            filter: brightness(0.8);
+        }
+        
+        .edit-spool-btn.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -673,6 +697,11 @@
                                         </div>
                                         <input type="hidden" name="spool_{{$printerID}}_{{$toolheadID}}" value="{{if $mappedSpool.SpoolID}}{{$mappedSpool.SpoolID}}{{end}}">
                                     </div>
+                                    <button class="edit-spool-btn {{if not $mappedSpool.SpoolID}}hidden{{end}}" 
+                                            data-spool-id="{{if $mappedSpool.SpoolID}}{{$mappedSpool.SpoolID}}{{end}}"
+                                            onclick="openSpoolmanEdit({{if $mappedSpool.SpoolID}}{{$mappedSpool.SpoolID}}{{else}}null{{end}})">
+                                        ✏️ Edit
+                                    </button>
                                 </div>
                                 {{end}}
                             </div>
@@ -933,6 +962,12 @@
                             // Handle empty selection - unmap the toolhead
                             await autoMapSpool(dropdown, '0', selectedText, '');
                         }
+                        
+                        // Update edit button after selection
+                        const toolheadRow = dropdown.closest('.toolhead-mapping-row');
+                        if (toolheadRow) {
+                            updateEditButton(toolheadRow, selectedValue, selectedColor);
+                        }
                     });
                 });
                 
@@ -1024,6 +1059,12 @@
                         } else {
                             // Handle empty selection - unmap the toolhead
                             await autoMapSpool(dropdown, '0', selectedText, '');
+                        }
+                        
+                        // Update edit button after selection
+                        const toolheadRow = dropdown.closest('.toolhead-mapping-row');
+                        if (toolheadRow) {
+                            updateEditButton(toolheadRow, selectedValue, selectedColor);
                         }
                     });
                 });
@@ -1267,6 +1308,8 @@
                     
                     // Revert to previous selection
                     button.innerHTML = originalContent;
+                    // Update edit button to previous state
+                    updateEditButton(toolheadRow, selectedValue, selectedColor);
                     return;
                 }
                 
@@ -1278,6 +1321,9 @@
                     </div>
                     <span class="dropdown-arrow">✅</span>
                 `;
+                
+                // Update edit button visibility and data
+                updateEditButton(toolheadRow, selectedValue, selectedColor);
                 
                 // Reset to normal state after 2 seconds
                 setTimeout(() => {
@@ -1656,6 +1702,51 @@
             initColorSwatches();
         });
         
+        // Open Spoolman edit page for a spool
+        function openSpoolmanEdit(spoolId) {
+            if (!spoolId) {
+                console.warn('No spool ID provided for editing');
+                return;
+            }
+            
+            const spoolmanBaseURL = '{{.SpoolmanBaseURL}}';
+            if (!spoolmanBaseURL) {
+                alert('Spoolman URL not configured. Please check your settings.');
+                return;
+            }
+            
+            const editURL = `${spoolmanBaseURL}/spool/edit/${spoolId}`;
+            window.open(editURL, '_blank');
+        }
+        
+        // Update edit button visibility and data based on selected spool
+        function updateEditButton(toolheadRow, selectedValue, selectedColor = '') {
+            const editButton = toolheadRow.querySelector('.edit-spool-btn');
+            if (!editButton) return;
+            
+            if (selectedValue && selectedValue !== '' && selectedValue !== '0') {
+                // Show button and update spool ID
+                editButton.classList.remove('hidden');
+                editButton.setAttribute('data-spool-id', selectedValue);
+                editButton.setAttribute('onclick', `openSpoolmanEdit(${selectedValue})`);
+                
+                // Set button color to match filament color
+                if (selectedColor) {
+                    editButton.style.backgroundColor = '#' + selectedColor;
+                    editButton.style.borderColor = '#' + selectedColor;
+                } else {
+                    // Fallback to default blue if no color
+                    editButton.style.backgroundColor = '#007bff';
+                    editButton.style.borderColor = '#007bff';
+                }
+            } else {
+                // Hide button
+                editButton.classList.add('hidden');
+                editButton.setAttribute('data-spool-id', '');
+                editButton.setAttribute('onclick', 'openSpoolmanEdit(null)');
+            }
+        }
+        
         // Initialize color swatches based on data-color attributes
         function initColorSwatches() {
             document.querySelectorAll('.color-swatch[data-color]').forEach(swatch => {
@@ -1875,6 +1966,12 @@
                         } else {
                             // Handle empty selection - unmap the toolhead
                             await autoMapSpool(dropdown, '0', selectedText, '');
+                        }
+                        
+                        // Update edit button after selection
+                        const toolheadRow = dropdown.closest('.toolhead-mapping-row');
+                        if (toolheadRow) {
+                            updateEditButton(toolheadRow, selectedValue, selectedColor);
                         }
                     });
                 });

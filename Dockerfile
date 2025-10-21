@@ -40,6 +40,9 @@ WORKDIR /app
 # Copy the binary from builder stage
 COPY --from=builder /app/main .
 
+# Copy static files from builder stage
+COPY --from=builder /app/static ./static
+
 # Create directory for database
 RUN mkdir -p /app/data
 

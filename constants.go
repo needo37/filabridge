@@ -11,10 +11,11 @@ const (
 
 // Default configuration values
 const (
-	DefaultSpoolmanURL  = "http://localhost:7912"
-	DefaultWebPort      = "5000"
-	DefaultPollInterval = 30
-	DefaultDBFileName   = "filabridge.db"
+	DefaultSpoolmanURL          = "http://localhost:7912"
+	DefaultWebPort              = "5000"
+	DefaultPollInterval         = 30
+	DefaultLocationSyncInterval = 5 // minutes
+	DefaultDBFileName           = "filabridge.db"
 )
 
 // Database configuration keys
@@ -23,6 +24,7 @@ const (
 	ConfigKeyAPIKey                       = "prusalink_api_key"
 	ConfigKeySpoolmanURL                  = "spoolman_url"
 	ConfigKeyPollInterval                 = "poll_interval"
+	ConfigKeyLocationSyncInterval         = "location_sync_interval"
 	ConfigKeyWebPort                      = "web_port"
 	ConfigKeyPrusaLinkTimeout             = "prusalink_timeout"
 	ConfigKeyPrusaLinkFileDownloadTimeout = "prusalink_file_download_timeout"

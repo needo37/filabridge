@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC Scan Progress - FilaBridge</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+        .progress-icon {
+            font-size: 64px;
+            color: #f39c12;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+        .progress-message {
+            color: #7f8c8d;
+            font-size: 18px;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        .progress-steps {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+        .step {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px 0;
+        }
+        .step:last-child {
+            margin-bottom: 0;
+        }
+        .step-icon {
+            font-size: 20px;
+            margin-right: 15px;
+            width: 30px;
+            text-align: center;
+        }
+        .step-text {
+            flex: 1;
+            color: #495057;
+        }
+        .step.completed .step-icon {
+            color: #27ae60;
+        }
+        .step.pending .step-icon {
+            color: #bdc3c7;
+        }
+        .step.current .step-icon {
+            color: #f39c12;
+        }
+        .back-button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background 0.3s;
+        }
+        .back-button:hover {
+            background: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="progress-icon">📱</div>
+        <h1>NFC Scan Progress</h1>
+        <div class="progress-message">{{.Message}}</div>
+        <div class="progress-steps">
+            <div class="step {{if .HasSpool}}completed{{else if not .HasLocation}}current{{else}}pending{{end}}">
+                <div class="step-icon">{{if .HasSpool}}✅{{else if not .HasLocation}}⏳{{else}}⭕{{end}}</div>
+                <div class="step-text">Scan spool tag</div>
+            </div>
+            <div class="step {{if .HasLocation}}completed{{else if .HasSpool}}current{{else}}pending{{end}}">
+                <div class="step-icon">{{if .HasLocation}}✅{{else if .HasSpool}}⏳{{else}}⭕{{end}}</div>
+                <div class="step-text">Scan location tag</div>
+            </div>
+        </div>
+        <a href="/" class="back-button">Back to Dashboard</a>
+    </div>
+</body>
+</html>

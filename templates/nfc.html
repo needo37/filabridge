@@ -1,0 +1,146 @@
+<!-- NFC Management Tab -->
+<div id="nfc-tab" class="tab-content">
+    <div class="section-header">
+        <h2>📱 NFC Management</h2>
+        <p>Generate NFC URLs and QR codes for spool and location tags</p>
+    </div>
+    
+    <!-- NFC Sub-tabs -->
+    <div class="nfc-tabs">
+        <button class="nfc-tab active" onclick="switchNfcTab('spool-tags', this)">🏷️ Spool Tags</button>
+        <button class="nfc-tab" onclick="switchNfcTab('filament-tags', this)">🎨 Filament Tags</button>
+        <button class="nfc-tab" onclick="switchNfcTab('location-tags', this)">📍 Location Tags</button>
+    </div>
+    
+    <!-- Spool Tags Tab -->
+    <div id="spool-tags-tab" class="nfc-tab-content active">
+        <div class="config-section">
+            <h3>🏷️ Spool Tags</h3>
+            <p class="help-text">Select a spool to generate its NFC URL and QR code. Scan the QR code with NFC Tools Pro to program your tags.</p>
+            
+            <!-- Side-by-Side Layout -->
+            <div class="nfc-side-by-side">
+                <!-- Left Side: Spool List -->
+                <div class="nfc-list-panel">
+                    <div class="nfc-search-container">
+                        <input type="text" id="spool-search" class="nfc-search-input" placeholder="Search spools..." autocomplete="off">
+                    </div>
+                    <div class="nfc-list-container" id="spool-list-container">
+                        <p>Loading spools...</p>
+                    </div>
+                </div>
+                
+                <!-- Right Side: QR Code Display -->
+                <div class="nfc-display-panel">
+                    <div id="spool-qr-display" class="nfc-qr-display" style="display: none;">
+                        <div class="nfc-selected-info">
+                            <h4 id="spool-selected-name">Selected Spool</h4>
+                            <div id="spool-selected-details"></div>
+                        </div>
+                        <div class="nfc-qr-large-container">
+                            <img id="spool-qr-large" src="" alt="QR Code" class="nfc-qr-large">
+                            <div id="spool-url-text" class="nfc-url-large"></div>
+                        </div>
+                    </div>
+                    <div id="spool-no-selection" class="nfc-no-selection">
+                        <div class="nfc-no-selection-icon">🏷️</div>
+                        <h4>Select a Spool</h4>
+                        <p>Choose a spool from the list to generate its QR code</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filament Tags Tab -->
+    <div id="filament-tags-tab" class="nfc-tab-content">
+        <div class="config-section">
+            <h3>🎨 Filament Tags</h3>
+            <p class="help-text">Select a filament type to generate its NFC URL and QR code. Scan the QR code with NFC Tools Pro to program your tags.</p>
+            
+            <!-- Side-by-Side Layout -->
+            <div class="nfc-side-by-side">
+                <!-- Left Side: Filament List -->
+                <div class="nfc-list-panel">
+                    <div class="nfc-search-container">
+                        <input type="text" id="filament-search" class="nfc-search-input" placeholder="Search filaments..." autocomplete="off">
+                    </div>
+                    <div class="nfc-list-container" id="filament-list-container">
+                        <p>Loading filaments...</p>
+                    </div>
+                </div>
+                
+                <!-- Right Side: QR Code Display -->
+                <div class="nfc-display-panel">
+                    <div id="filament-qr-display" class="nfc-qr-display" style="display: none;">
+                        <div class="nfc-selected-info">
+                            <h4 id="filament-selected-name">Selected Filament</h4>
+                            <div id="filament-selected-details"></div>
+                        </div>
+                        <div class="nfc-qr-large-container">
+                            <img id="filament-qr-large" src="" alt="QR Code" class="nfc-qr-large">
+                            <div id="filament-url-text" class="nfc-url-large"></div>
+                        </div>
+                    </div>
+                    <div id="filament-no-selection" class="nfc-no-selection">
+                        <div class="nfc-no-selection-icon">🎨</div>
+                        <h4>Select a Filament</h4>
+                        <p>Choose a filament from the list to generate its QR code</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Location Tags Tab -->
+    <div id="location-tags-tab" class="nfc-tab-content">
+        <div class="config-section">
+            <h3>📍 Location Tags</h3>
+            <p class="help-text">Select a location to generate its NFC URL and QR code. Scan the QR code with NFC Tools Pro to program your tags.</p>
+            
+            <!-- Add Location Button -->
+            <div class="form-inline" style="display:flex; gap:20px; align-items:flex-end; margin: 12px 0; flex-wrap: wrap;">
+                <div class="form-group">
+                    <label for="newLocationName">Name *</label>
+                    <input type="text" id="newLocationName" placeholder="e.g., Drybox A">
+                </div>
+                <div class="form-group" style="margin-left: auto;">
+                    <button class="btn" id="addLocationBtn" onclick="addLocation()">Add Location</button>
+                </div>
+            </div>
+            
+            <!-- Side-by-Side Layout -->
+            <div class="nfc-side-by-side">
+                <!-- Left Side: Location List -->
+                <div class="nfc-list-panel">
+                    <div class="nfc-search-container">
+                        <input type="text" id="location-search" class="nfc-search-input" placeholder="Search locations..." autocomplete="off">
+                    </div>
+                    <div class="nfc-list-container" id="location-list-container">
+                        <p>Loading locations...</p>
+                    </div>
+                </div>
+                
+                <!-- Right Side: QR Code Display -->
+                <div class="nfc-display-panel">
+                    <div id="location-qr-display" class="nfc-qr-display" style="display: none;">
+                        <div class="nfc-selected-info">
+                            <h4 id="location-selected-name">Selected Location</h4>
+                            <div id="location-selected-details"></div>
+                        </div>
+                        <div class="nfc-qr-large-container">
+                            <img id="location-qr-large" src="" alt="QR Code" class="nfc-qr-large">
+                            <div id="location-url-text" class="nfc-url-large"></div>
+                        </div>
+                    </div>
+                    <div id="location-no-selection" class="nfc-no-selection">
+                        <div class="nfc-no-selection-icon">📍</div>
+                        <h4>Select a Location</h4>
+                        <p>Choose a location from the list to generate its QR code</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+</div>

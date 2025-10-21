@@ -2,11 +2,13 @@ package main
 
 import (
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/skip2/go-qrcode"
 )
 
 //go:embed templates/*
@@ -128,6 +131,7 @@ func (ws *WebServer) setupRoutes() {
 	{
 		api.GET("/status", ws.statusHandler)
 		api.GET("/spools", ws.spoolsHandler)
+		api.GET("/filaments", ws.filamentsHandler)
 		api.POST("/map_toolhead", ws.mapToolheadHandler)
 		api.GET("/available_spools", ws.availableSpoolsHandler)
 		api.GET("/spoolman/test", ws.testSpoolmanConnectionHandler)
@@ -142,6 +146,15 @@ func (ws *WebServer) setupRoutes() {
 		api.POST("/detect_printer", ws.detectPrinterHandler)
 		api.GET("/print-errors", ws.getPrintErrorsHandler)
 		api.POST("/print-errors/:id/acknowledge", ws.acknowledgePrintErrorHandler)
+		api.GET("/nfc/assign", ws.nfcAssignHandler)
+		api.GET("/nfc/urls", ws.nfcUrlsHandler)
+		api.GET("/nfc/session/status", ws.nfcSessionStatusHandler)
+		api.GET("/locations", ws.getLocationsHandler)
+		api.GET("/locations/:name/status", ws.getLocationStatusHandler)
+		api.POST("/locations", ws.createLocationHandler)
+		api.PUT("/locations/:name", ws.updateLocationHandler)
+		api.DELETE("/locations/:name", ws.deleteLocationHandler)
+		api.POST("/locations/import", ws.importSpoolmanLocationsHandler)
 	}
 
 	// WebSocket endpoint
@@ -400,6 +413,16 @@ func (ws *WebServer) spoolsHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, spools)
+}
+
+// filamentsHandler returns all filament types as JSON
+func (ws *WebServer) filamentsHandler(c *gin.Context) {
+	filaments, err := ws.bridge.spoolman.GetAllFilaments()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, filaments)
 }
 
 // validatePrinterConfig validates printer configuration input
@@ -664,22 +687,8 @@ func (ws *WebServer) updatePrinterHandler(c *gin.Context) {
 			log.Printf("⚠️ [Auto-Detection] Failed to detect model for %s: %v (keeping current model: %s)",
 				printerConfig.IPAddress, err, printerConfig.Model)
 		} else {
-			// Determine model based on hostname (same logic as detectPrinterHandler)
-			hostname := strings.ToLower(printerInfo.Hostname)
-			hostname = strings.TrimSpace(hostname)
-
-			detectedModel := ModelUnknown
-			if strings.Contains(hostname, ModelCorePattern) {
-				detectedModel = ModelCoreOne
-			} else if strings.Contains(hostname, ModelXLPattern) {
-				detectedModel = ModelXL
-			} else if strings.Contains(hostname, ModelMK4Pattern) {
-				detectedModel = ModelMK4
-			} else if strings.Contains(hostname, ModelMK3Pattern) {
-				detectedModel = ModelMK35
-			} else if strings.Contains(hostname, ModelMiniPattern) {
-				detectedModel = ModelMiniPlus
-			}
+			// Use shared model detection function
+			detectedModel := detectPrinterModel(printerInfo.Hostname)
 
 			if detectedModel != ModelUnknown {
 				log.Printf("✅ [Auto-Detection] Detected model for %s: '%s' -> %s",
@@ -730,6 +739,38 @@ func (ws *WebServer) deletePrinterHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Printer deleted successfully"})
 }
 
+// detectPrinterModel detects printer model from hostname
+func detectPrinterModel(hostname string) string {
+	model := ModelUnknown
+	hostnameLower := strings.ToLower(hostname)
+	hostnameLower = strings.TrimSpace(hostnameLower) // Clean up any whitespace
+
+	log.Printf("🔍 [Detection] Checking hostname '%s' against patterns:", hostnameLower)
+
+	if strings.Contains(hostnameLower, ModelCorePattern) {
+		model = ModelCoreOne
+		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelCorePattern, model)
+	} else if strings.Contains(hostnameLower, ModelXLPattern) {
+		model = ModelXL
+		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelXLPattern, model)
+	} else if strings.Contains(hostnameLower, ModelMK4Pattern) {
+		model = ModelMK4
+		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelMK4Pattern, model)
+	} else if strings.Contains(hostnameLower, ModelMK3Pattern) {
+		model = ModelMK35
+		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelMK3Pattern, model)
+	} else if strings.Contains(hostnameLower, ModelMiniPattern) {
+		model = ModelMiniPlus
+		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelMiniPattern, model)
+	} else {
+		log.Printf("❌ [Detection] No pattern matched for hostname '%s'. Available patterns: %s, %s, %s, %s, %s",
+			hostnameLower, ModelCorePattern, ModelXLPattern, ModelMK4Pattern, ModelMK3Pattern, ModelMiniPattern)
+	}
+
+	log.Printf("🎯 [Detection] Final result: hostname='%s' -> model='%s'", hostname, model)
+	return model
+}
+
 // detectPrinterHandler detects printer model from PrusaLink API
 func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 	var req struct {
@@ -770,34 +811,8 @@ func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 
 	log.Printf("📥 [Detection] Received printer info: hostname='%s'", printerInfo.Hostname)
 
-	// Determine model based on hostname
-	model := ModelUnknown
-	hostname := strings.ToLower(printerInfo.Hostname)
-	hostname = strings.TrimSpace(hostname) // Clean up any whitespace
-
-	log.Printf("🔍 [Detection] Checking hostname '%s' against patterns:", hostname)
-
-	if strings.Contains(hostname, ModelCorePattern) {
-		model = ModelCoreOne
-		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelCorePattern, model)
-	} else if strings.Contains(hostname, ModelXLPattern) {
-		model = ModelXL
-		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelXLPattern, model)
-	} else if strings.Contains(hostname, ModelMK4Pattern) {
-		model = ModelMK4
-		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelMK4Pattern, model)
-	} else if strings.Contains(hostname, ModelMK3Pattern) {
-		model = ModelMK35
-		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelMK3Pattern, model)
-	} else if strings.Contains(hostname, ModelMiniPattern) {
-		model = ModelMiniPlus
-		log.Printf("✅ [Detection] Matched pattern '%s' -> %s", ModelMiniPattern, model)
-	} else {
-		log.Printf("❌ [Detection] No pattern matched for hostname '%s'. Available patterns: %s, %s, %s, %s, %s",
-			hostname, ModelCorePattern, ModelXLPattern, ModelMK4Pattern, ModelMK3Pattern, ModelMiniPattern)
-	}
-
-	log.Printf("🎯 [Detection] Final result: hostname='%s' -> model='%s'", printerInfo.Hostname, model)
+	// Use shared model detection function
+	model := detectPrinterModel(printerInfo.Hostname)
 
 	// Return detected information (toolheads will be provided by user)
 	c.JSON(http.StatusOK, gin.H{
@@ -957,4 +972,640 @@ func (ws *WebServer) reloadBridgeConfig() error {
 // Start starts the web server
 func (ws *WebServer) Start(port string) error {
 	return ws.router.Run(":" + port)
+}
+
+// nfcAssignHandler handles NFC tag scans
+func (ws *WebServer) nfcAssignHandler(c *gin.Context) {
+	spoolIDStr := c.Query("spool")
+	locationStr := c.Query("location")
+	clientIP := getClientIP(c.ClientIP())
+
+	// Generate session ID based on client IP
+	sessionID := generateSessionID(clientIP)
+
+	var spoolID int
+	var printerName string
+	var toolheadID int
+	var err error
+
+	// Parse parameters
+	if spoolIDStr != "" {
+		spoolID, err = strconv.Atoi(spoolIDStr)
+		if err != nil {
+			c.HTML(http.StatusBadRequest, "nfc_error.html", gin.H{
+				"Error": "Invalid spool ID",
+			})
+			return
+		}
+	}
+
+	var locationName string
+	var isPrinterLocation bool
+
+	if locationStr != "" {
+		printerName, toolheadID, locationName, isPrinterLocation, err = parseLocationParam(locationStr)
+		if err != nil {
+			c.HTML(http.StatusBadRequest, "nfc_error.html", gin.H{
+				"Error": err.Error(),
+			})
+			return
+		}
+	}
+
+	// Create or update session
+	session, err := ws.bridge.createOrUpdateSession(sessionID, spoolID, printerName, toolheadID, locationName, isPrinterLocation)
+	if err != nil {
+		c.HTML(http.StatusInternalServerError, "nfc_error.html", gin.H{
+			"Error": "Failed to create session: " + err.Error(),
+		})
+		return
+	}
+
+	// Check if session is complete
+	if session.isSessionComplete() {
+		// Complete the assignment
+		err = ws.bridge.AssignSpoolToLocation(session.SpoolID, session.PrinterName, session.ToolheadID, session.LocationName, session.IsPrinterLocation)
+		if err != nil {
+			c.HTML(http.StatusInternalServerError, "nfc_error.html", gin.H{
+				"Error": "Assignment failed: " + err.Error(),
+			})
+			return
+		}
+
+		// Broadcast update to all connected clients
+		ws.BroadcastStatus()
+
+		// Clean up session
+		ws.bridge.deleteSession(sessionID)
+
+		// Show success page
+		c.HTML(http.StatusOK, "nfc_success.html", gin.H{
+			"SpoolID":           session.SpoolID,
+			"PrinterName":       session.PrinterName,
+			"ToolheadID":        session.ToolheadID,
+			"IsPrinterLocation": session.IsPrinterLocation,
+			"LocationName":      session.LocationName,
+		})
+		return
+	}
+
+	// Session not complete, show progress
+	var message string
+	if session.HasSpool && !session.HasLocation {
+		message = fmt.Sprintf("Spool %d selected. Now scan a location tag.", session.SpoolID)
+	} else if session.HasLocation && !session.HasSpool {
+		if session.IsPrinterLocation {
+			message = fmt.Sprintf("Location %s - Toolhead %d selected. Now scan a spool tag.", session.PrinterName, session.ToolheadID)
+		} else {
+			message = fmt.Sprintf("Location '%s' selected. Now scan a spool tag.", session.LocationName)
+		}
+	} else {
+		message = "Session started. Scan a spool or location tag."
+	}
+
+	c.HTML(http.StatusOK, "nfc_progress.html", gin.H{
+		"Message":     message,
+		"SessionID":   sessionID,
+		"HasSpool":    session.HasSpool,
+		"HasLocation": session.HasLocation,
+	})
+}
+
+// nfcUrlsHandler returns all available NFC URLs with QR codes
+func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
+	var urls []gin.H
+
+	// Get all spools
+	spools, err := ws.bridge.spoolman.GetAllSpools()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Generate spool URLs
+	for _, spool := range spools {
+		url := fmt.Sprintf("http://%s/api/nfc/assign?spool=%d", c.Request.Host, spool.ID)
+
+		// Safely get color hex
+		colorHex := ""
+		if spool.Filament != nil && spool.Filament.ColorHex != "" {
+			colorHex = spool.Filament.ColorHex
+			// Ensure it starts with #
+			if !strings.HasPrefix(colorHex, "#") {
+				colorHex = "#" + colorHex
+			}
+		}
+
+		// Generate QR code
+		qrCode, err := qrcode.Encode(url, qrcode.Medium, 256)
+		if err != nil {
+			log.Printf("Error generating QR code for spool %d: %v", spool.ID, err)
+			// Continue without QR code if generation fails
+			urls = append(urls, gin.H{
+				"type":             "spool",
+				"spool_id":         spool.ID,
+				"spool_name":       spool.Name,
+				"material":         spool.Material,
+				"brand":            spool.Brand,
+				"color_hex":        colorHex,
+				"remaining_weight": spool.RemainingWeight,
+				"url":              url,
+				"qr_code_base64":   "",
+			})
+			continue
+		}
+
+		qrCodeBase64 := base64.StdEncoding.EncodeToString(qrCode)
+		urls = append(urls, gin.H{
+			"type":             "spool",
+			"spool_id":         spool.ID,
+			"spool_name":       spool.Name,
+			"material":         spool.Material,
+			"brand":            spool.Brand,
+			"color_hex":        colorHex,
+			"remaining_weight": spool.RemainingWeight,
+			"url":              url,
+			"qr_code_base64":   qrCodeBase64,
+		})
+	}
+
+	// Get all filaments
+	filaments, err := ws.bridge.spoolman.GetAllFilaments()
+	if err != nil {
+		log.Printf("Warning: Failed to get filaments for NFC URLs: %v", err)
+		filaments = []SpoolmanFilament{}
+	}
+
+	// Generate filament URLs
+	for _, filament := range filaments {
+		url := fmt.Sprintf("%s/filament/show/%d", ws.bridge.config.SpoolmanURL, filament.ID)
+
+		// Safely get color hex
+		colorHex := ""
+		if filament.ColorHex != "" {
+			colorHex = filament.ColorHex
+			// Ensure it starts with #
+			if !strings.HasPrefix(colorHex, "#") {
+				colorHex = "#" + colorHex
+			}
+		}
+
+		// Get brand name
+		brand := "Unknown Brand"
+		if filament.Vendor != nil {
+			brand = filament.Vendor.Name
+		}
+
+		// Generate QR code
+		qrCode, err := qrcode.Encode(url, qrcode.Medium, 256)
+		if err != nil {
+			log.Printf("Error generating QR code for filament %d: %v", filament.ID, err)
+			// Continue without QR code if generation fails
+			urls = append(urls, gin.H{
+				"type":           "filament",
+				"filament_id":    filament.ID,
+				"filament_name":  filament.Name,
+				"material":       filament.Material,
+				"brand":          brand,
+				"color_hex":      colorHex,
+				"extruder_temp":  filament.SettingsExtruderTemp,
+				"bed_temp":       filament.SettingsBedTemp,
+				"diameter":       filament.Diameter,
+				"density":        filament.Density,
+				"url":            url,
+				"qr_code_base64": "",
+			})
+			continue
+		}
+
+		qrCodeBase64 := base64.StdEncoding.EncodeToString(qrCode)
+		urls = append(urls, gin.H{
+			"type":           "filament",
+			"filament_id":    filament.ID,
+			"filament_name":  filament.Name,
+			"material":       filament.Material,
+			"brand":          brand,
+			"color_hex":      colorHex,
+			"extruder_temp":  filament.SettingsExtruderTemp,
+			"bed_temp":       filament.SettingsBedTemp,
+			"diameter":       filament.Diameter,
+			"density":        filament.Density,
+			"url":            url,
+			"qr_code_base64": qrCodeBase64,
+		})
+	}
+
+	// Get FilaBridge locations (these are always available and are the source of truth)
+	fbLocations, err := ws.bridge.GetAllFilaBridgeLocations()
+	if err != nil {
+		log.Printf("Warning: Failed to get FilaBridge locations: %v", err)
+		fbLocations = []FilaBridgeLocation{}
+	}
+
+	// Generate location URLs for FilaBridge locations
+	for _, location := range fbLocations {
+		locationParam := location.Name
+		url := fmt.Sprintf("http://%s/api/nfc/assign?location=%s", c.Request.Host, locationParam)
+
+		// Get status information for this location
+		status, err := ws.bridge.GetLocationStatus(location.Name)
+		if err != nil {
+			log.Printf("Warning: Could not get status for location '%s': %v", location.Name, err)
+			// Continue with basic info if status check fails
+			status = &LocationStatus{
+				Name:               location.Name,
+				Type:               location.Type,
+				PrinterName:        location.PrinterName,
+				ToolheadID:         location.ToolheadID,
+				CreatedAt:          location.CreatedAt,
+				UpdatedAt:          location.UpdatedAt,
+				ExistsInFilaBridge: true,
+				ExistsInSpoolman:   false,
+				IsLocalOnly:        true,
+			}
+		}
+
+		// Generate QR code
+		qrCode, err := qrcode.Encode(url, qrcode.Medium, 256)
+		if err != nil {
+			log.Printf("Error generating QR code for FilaBridge location %s: %v", locationParam, err)
+			// Continue without QR code if generation fails
+			urls = append(urls, gin.H{
+				"type":                 "location",
+				"location_type":        location.Type,
+				"location_name":        location.Name,
+				"display_name":         location.Name,
+				"printer_name":         location.PrinterName,
+				"toolhead_id":          location.ToolheadID,
+				"url":                  url,
+				"qr_code_base64":       "",
+				"exists_in_filabridge": status.ExistsInFilaBridge,
+				"exists_in_spoolman":   status.ExistsInSpoolman,
+				"is_local_only":        status.IsLocalOnly,
+			})
+			continue
+		}
+
+		qrCodeBase64 := base64.StdEncoding.EncodeToString(qrCode)
+		locationData := gin.H{
+			"type":                 "location",
+			"location_type":        location.Type,
+			"location_name":        location.Name,
+			"display_name":         location.Name,
+			"printer_name":         location.PrinterName,
+			"toolhead_id":          location.ToolheadID,
+			"url":                  url,
+			"qr_code_base64":       qrCodeBase64,
+			"exists_in_filabridge": status.ExistsInFilaBridge,
+			"exists_in_spoolman":   status.ExistsInSpoolman,
+			"is_local_only":        status.IsLocalOnly,
+		}
+		log.Printf("DEBUG: FilaBridge location '%s' (local_only: %v)", location.Name, status.IsLocalOnly)
+		urls = append(urls, locationData)
+	}
+
+	// Get printer configurations for virtual toolhead locations
+	printerConfigs, err := ws.bridge.GetAllPrinterConfigs()
+	if err != nil {
+		log.Printf("Warning: Failed to get printer configurations: %v", err)
+		printerConfigs = make(map[string]PrinterConfig)
+	}
+
+	// Generate virtual printer toolhead locations
+	for _, printerConfig := range printerConfigs {
+		for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
+			locationParam := fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID)
+			url := fmt.Sprintf("http://%s/api/nfc/assign?location=%s", c.Request.Host, locationParam)
+
+			// Generate QR code
+			qrCode, err := qrcode.Encode(url, qrcode.Medium, 256)
+			if err != nil {
+				log.Printf("Error generating QR code for printer location %s: %v", locationParam, err)
+				// Continue without QR code if generation fails
+				urls = append(urls, gin.H{
+					"type":           "location",
+					"location_type":  "printer",
+					"location_name":  fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID),
+					"display_name":   fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID),
+					"printer_name":   printerConfig.Name,
+					"toolhead_id":    toolheadID,
+					"url":            url,
+					"qr_code_base64": "",
+				})
+				continue
+			}
+
+			qrCodeBase64 := base64.StdEncoding.EncodeToString(qrCode)
+			urls = append(urls, gin.H{
+				"type":           "location",
+				"location_type":  "printer",
+				"location_name":  fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID),
+				"display_name":   fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID),
+				"printer_name":   printerConfig.Name,
+				"toolhead_id":    toolheadID,
+				"url":            url,
+				"qr_code_base64": qrCodeBase64,
+			})
+		}
+	}
+
+	// Sort URLs: filaments first, then spools, then locations alphabetically by display name
+	sort.Slice(urls, func(i, j int) bool {
+		typeI := urls[i]["type"].(string)
+		typeJ := urls[j]["type"].(string)
+
+		// Filaments come first, then spools, then locations
+		if typeI != typeJ {
+			if typeI == "filament" {
+				return true
+			}
+			if typeJ == "filament" {
+				return false
+			}
+			if typeI == "spool" {
+				return true
+			}
+			if typeJ == "spool" {
+				return false
+			}
+			// Both are locations
+			return true
+		}
+
+		// Both are the same type - apply appropriate sorting
+		if typeI == "location" {
+			// Locations: sort by display name (case-insensitive)
+			displayNameI := urls[i]["display_name"].(string)
+			displayNameJ := urls[j]["display_name"].(string)
+			return strings.ToLower(displayNameI) < strings.ToLower(displayNameJ)
+		}
+
+		if typeI == "filament" {
+			// Filaments: sort by ID (same as GetAllFilaments)
+			idI := urls[i]["filament_id"].(int)
+			idJ := urls[j]["filament_id"].(int)
+			return idI < idJ
+		}
+
+		if typeI == "spool" {
+			// Spools: sort by display name (Material - Brand - Name), then by remaining weight
+			// This matches the sorting logic in GetAllSpools()
+			materialI := urls[i]["material"].(string)
+			materialJ := urls[j]["material"].(string)
+			brandI := urls[i]["brand"].(string)
+			brandJ := urls[j]["brand"].(string)
+			nameI := urls[i]["spool_name"].(string)
+			nameJ := urls[j]["spool_name"].(string)
+
+			// Create display names for comparison (same as getSpoolDisplayName())
+			displayNameI := fmt.Sprintf("%s - %s - %s", materialI, brandI, nameI)
+			displayNameJ := fmt.Sprintf("%s - %s - %s", materialJ, brandJ, nameJ)
+
+			if displayNameI != displayNameJ {
+				return displayNameI < displayNameJ
+			}
+
+			// If display names are the same, sort by remaining weight (ascending - use less filament first)
+			weightI := urls[i]["remaining_weight"].(float64)
+			weightJ := urls[j]["remaining_weight"].(float64)
+			return weightI < weightJ
+		}
+
+		return false
+	})
+
+	c.JSON(http.StatusOK, gin.H{"urls": urls})
+}
+
+// nfcSessionStatusHandler returns the current session status
+func (ws *WebServer) nfcSessionStatusHandler(c *gin.Context) {
+	clientIP := getClientIP(c.ClientIP())
+	sessionID := generateSessionID(clientIP)
+
+	session, err := ws.bridge.getSession(sessionID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"active": false,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"active":              true,
+		"session_id":          session.SessionID,
+		"has_spool":           session.HasSpool,
+		"has_location":        session.HasLocation,
+		"spool_id":            session.SpoolID,
+		"printer_name":        session.PrinterName,
+		"toolhead_id":         session.ToolheadID,
+		"location_name":       session.LocationName,
+		"is_printer_location": session.IsPrinterLocation,
+		"expires_at":          session.ExpiresAt,
+	})
+}
+
+// Location Management Handlers
+
+// getLocationsHandler returns all FilaBridge locations plus virtual printer toolheads
+func (ws *WebServer) getLocationsHandler(c *gin.Context) {
+	// Get FilaBridge locations
+	fbLocations, err := ws.bridge.GetAllFilaBridgeLocations()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get printer configurations for virtual toolhead locations
+	printerConfigs, err := ws.bridge.GetAllPrinterConfigs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Create virtual printer toolhead locations
+	var allLocations []gin.H
+	for _, printerConfig := range printerConfigs {
+		for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
+			allLocations = append(allLocations, gin.H{
+				"id":           fmt.Sprintf("printer_%s_%d", printerConfig.Name, toolheadID),
+				"name":         fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID),
+				"type":         "printer",
+				"printer_name": printerConfig.Name,
+				"toolhead_id":  toolheadID,
+				"is_virtual":   true,
+			})
+		}
+	}
+
+	// Add FilaBridge locations with status information
+	for _, loc := range fbLocations {
+		// Get status information for this location
+		status, err := ws.bridge.GetLocationStatus(loc.Name)
+		if err != nil {
+			log.Printf("Warning: Could not get status for location '%s': %v", loc.Name, err)
+			// Continue with basic info if status check fails
+			status = &LocationStatus{
+				Name:               loc.Name,
+				Type:               loc.Type,
+				PrinterName:        loc.PrinterName,
+				ToolheadID:         loc.ToolheadID,
+				CreatedAt:          loc.CreatedAt,
+				UpdatedAt:          loc.UpdatedAt,
+				ExistsInFilaBridge: true,
+				ExistsInSpoolman:   false,
+				IsLocalOnly:        true,
+			}
+		}
+
+		allLocations = append(allLocations, gin.H{
+			"name":                 loc.Name,
+			"type":                 loc.Type,
+			"printer_name":         loc.PrinterName,
+			"toolhead_id":          loc.ToolheadID,
+			"created_at":           loc.CreatedAt,
+			"updated_at":           loc.UpdatedAt,
+			"is_virtual":           false,
+			"exists_in_filabridge": status.ExistsInFilaBridge,
+			"exists_in_spoolman":   status.ExistsInSpoolman,
+			"is_local_only":        status.IsLocalOnly,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"locations": allLocations})
+}
+
+// getLocationStatusHandler returns detailed status information for a specific location
+func (ws *WebServer) getLocationStatusHandler(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Location name is required"})
+		return
+	}
+
+	status, err := ws.bridge.GetLocationStatus(name)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
+// createLocationHandler creates a new FilaBridge location
+func (ws *WebServer) createLocationHandler(c *gin.Context) {
+	var req struct {
+		Name        string `json:"name" binding:"required"`
+		Type        string `json:"type"`
+		PrinterName string `json:"printer_name,omitempty"`
+		ToolheadID  int    `json:"toolhead_id,omitempty"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("createLocationHandler: bad request: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Allow free-text type; default to storage when empty
+	if strings.TrimSpace(req.Type) == "" {
+		req.Type = "storage"
+	}
+
+	log.Printf("createLocationHandler: creating location name='%s' type='%s'", req.Name, req.Type)
+	location, err := ws.bridge.CreateLocation(req.Name, req.Type, "", 0)
+	if err != nil {
+		log.Printf("createLocationHandler: failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, location)
+}
+
+// updateLocationHandler updates a FilaBridge location
+func (ws *WebServer) updateLocationHandler(c *gin.Context) {
+	oldName := c.Param("name")
+	if oldName == "" {
+		log.Printf("updateLocationHandler: missing location name")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Location name is required"})
+		return
+	}
+
+	var req struct {
+		Name string `json:"name" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("updateLocationHandler: bad request for name='%s': %v", oldName, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	log.Printf("updateLocationHandler: renaming '%s' to '%s'", oldName, req.Name)
+	if err := ws.bridge.UpdateLocation(oldName, req.Name); err != nil {
+		log.Printf("updateLocationHandler: failed for name='%s': %v", oldName, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get updated status to provide feedback about where the location exists
+	status, err := ws.bridge.GetLocationStatus(req.Name)
+	if err != nil {
+		log.Printf("Warning: Could not get updated status for location '%s': %v", req.Name, err)
+		c.JSON(http.StatusOK, gin.H{"message": "Location updated successfully"})
+		return
+	}
+
+	message := "Location updated successfully"
+	if status.IsLocalOnly {
+		message += " (local-only location - not synced to Spoolman)"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": message,
+		"status":  status,
+	})
+}
+
+// deleteLocationHandler deletes a FilaBridge location
+func (ws *WebServer) deleteLocationHandler(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" {
+		log.Printf("deleteLocationHandler: missing location name")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Location name is required"})
+		return
+	}
+
+	// Get status before deletion to provide feedback
+	status, err := ws.bridge.GetLocationStatus(name)
+	if err != nil {
+		log.Printf("Warning: Could not get status for location '%s' before deletion: %v", name, err)
+	}
+
+	log.Printf("deleteLocationHandler: deleting '%s'", name)
+	if err := ws.bridge.DeleteLocation(name); err != nil {
+		log.Printf("deleteLocationHandler: failed for name='%s': %v", name, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	message := "Location deleted successfully"
+	if status != nil && status.IsLocalOnly {
+		message += " (local-only location - was not synced to Spoolman)"
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": message})
+}
+
+// importSpoolmanLocationsHandler imports all locations from Spoolman into FilaBridge cache
+func (ws *WebServer) importSpoolmanLocationsHandler(c *gin.Context) {
+	log.Printf("Starting import of Spoolman locations...")
+
+	if err := ws.bridge.ImportSpoolmanLocations(); err != nil {
+		log.Printf("Failed to import Spoolman locations: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Spoolman locations imported successfully"})
 }

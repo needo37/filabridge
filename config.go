@@ -33,6 +33,7 @@ type FilamentSpool struct {
 type Config struct {
 	SpoolmanURL                  string
 	PollInterval                 time.Duration
+	LocationSyncInterval         time.Duration
 	DBFile                       string
 	WebPort                      string
 	PrusaLinkTimeout             int
@@ -54,6 +55,14 @@ func LoadConfig(bridge *FilamentBridge) (*Config, error) {
 	if pollStr, exists := configValues[ConfigKeyPollInterval]; exists {
 		if parsed, err := strconv.Atoi(pollStr); err == nil {
 			pollInterval = parsed
+		}
+	}
+
+	// Parse location sync interval
+	locationSyncInterval := DefaultLocationSyncInterval
+	if syncStr, exists := configValues[ConfigKeyLocationSyncInterval]; exists {
+		if parsed, err := strconv.Atoi(syncStr); err == nil {
+			locationSyncInterval = parsed
 		}
 	}
 
@@ -82,6 +91,7 @@ func LoadConfig(bridge *FilamentBridge) (*Config, error) {
 	config := &Config{
 		SpoolmanURL:                  configValues[ConfigKeySpoolmanURL],
 		PollInterval:                 time.Duration(pollInterval) * time.Second,
+		LocationSyncInterval:         time.Duration(locationSyncInterval) * time.Minute,
 		DBFile:                       getDBFilePath(),
 		WebPort:                      configValues[ConfigKeyWebPort],
 		PrusaLinkTimeout:             prusaLinkTimeout,
@@ -131,6 +141,14 @@ func LoadConfig(bridge *FilamentBridge) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+// resolvePrinterName resolves printer name from config, with fallback to IP-based name
+func resolvePrinterName(config PrinterConfig) string {
+	if config.Name != "" {
+		return config.Name
+	}
+	return fmt.Sprintf("Printer_%s", config.IPAddress)
 }
 
 // getDBFilePath returns the database file path, checking environment variable first

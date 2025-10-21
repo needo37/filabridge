@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FilaBridge - The missing link between printers and filament inventory">
+    <meta name="theme-color" content="#667eea">
+    <title>FilaBridge Dashboard</title>
+    <!-- External CSS Files -->
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/dropdowns.css">
+    <link rel="stylesheet" href="/static/css/tabs.css">
+    <link rel="stylesheet" href="/static/css/printers.css">
+    <link rel="stylesheet" href="/static/css/nfc.css">
+    <link rel="stylesheet" href="/static/css/modals.css">
+    
+    <!-- Preload critical JavaScript -->
+    <link rel="preload" href="/static/js/main.js" as="script">
+    <link rel="preload" href="/static/js/dropdowns.js" as="script">
+</head>
+<body data-spoolman-url="{{.SpoolmanBaseURL}}">
+    <div class="container">
+        <div class="header">
+            <h1>🔗 FilaBridge Dashboard</h1>
+            <p>The missing link between printers and filament inventory</p>
+        </div>
+        
+        <div class="content">
+            <!-- Tab Navigation -->
+            <ul class="tabs">
+                <li><button class="tab active" onclick="switchTab('status')">📊 Filament Status</button></li>
+                <li><button class="tab" onclick="switchTab('nfc')">📱 NFC Management</button></li>
+                <li><button class="tab" onclick="switchTab('settings')">⚙️ Settings</button></li>
+            </ul>
+            
+            {{template "content" .}}
+        </div>
+    </div>
+
+    {{template "modals" .}}
+
+    <!-- External JavaScript Files -->
+    <script src="/static/js/main.js"></script>
+    <script src="/static/js/dropdowns.js"></script>
+    <script src="/static/js/printers.js"></script>
+    <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/nfc.js"></script>
+</body>
+</html>

@@ -23,6 +23,9 @@ I run multiple 3D printers and use Spoolman to track my filament inventory. The 
 - ⚠️ **Error Handling**: Print error detection with acknowledgment system for failed filament tracking
 - 🔄 **Auto-mapping**: Automatic spool assignment when selecting from dropdown menus
 - 🌐 **Live Updates**: Real-time status updates without page refreshes using WebSocket technology
+- 🏷️ **NFC Tag Support**: Generate QR codes and program NFC tags for spools, filaments, and locations
+- 📱 **Smart Scanning**: Two-step NFC workflow - scan spool + location (or location + spool) for instant assignment
+- 📍 **Location Tracking**: Track spools in custom locations (dryboxes) or printer toolheads
 
 ## Why FilaBridge?
 
@@ -32,6 +35,8 @@ Managing filament inventory across multiple 3D printers is tedious. FilaBridge a
 - Automatically updating your Spoolman inventory when prints complete
 - Providing accurate filament usage by parsing G-code files
 - Handling errors gracefully with clear notifications and acknowledgment system
+- Using NFC tags to quickly assign spools to printers or storage locations
+- Tracking filament locations across your workshop
 
 No more manual updates or guesswork about remaining filament!
 
@@ -46,6 +51,8 @@ No more manual updates or guesswork about remaining filament!
 - PrusaLink enabled on your printer(s) for local network access
 - Spoolman
 - **For building from source**: Go 1.23 or higher
+- **(Optional) For NFC features**: NFC-capable smartphone and NFC tags (NTAG213/215/216 recommended)
+- **(Recommendation) NFC Tools Pro** mobile app (for programming tags)
 
 ## Installation
 
@@ -164,6 +171,16 @@ The web interface provides:
 3. **Monitor usage**: The system automatically tracks and updates filament usage
 4. **Handle errors**: Acknowledge any print processing errors that require manual intervention
 
+### NFC Tag Management
+
+1. **Generate QR Codes**: Navigate to NFC Management tab in the web interface
+2. **Create Tags**: 
+   - **Spool Tags**: Generate QR codes for individual spools
+   - **Filament Tags**: Generate QR codes for filament types (for new unopened spools)
+   - **Location Tags**: Create and generate QR codes for printer toolheads and custom locations (dryboxes, storage shelves, etc.)
+3. **Program NFC Tags**: Use NFC Tools Pro to scan QR codes and write URLs to NFC tags
+4. **Assign Spools**: Tap spool tag, then location tag (location then spool works as well) to instantly assign and update inventory
+
 ## API Endpoints
 
 The web interface also provides REST API endpoints:
@@ -174,6 +191,13 @@ The web interface also provides REST API endpoints:
 - `POST /api/unmap_toolhead` - Unmap a spool from a toolhead
 - `GET /api/print-errors` - Get all unacknowledged print errors
 - `POST /api/print-errors/{id}/acknowledge` - Acknowledge a print error
+- `GET /api/nfc/assign` - Handle NFC tag scans (spool or location)
+- `GET /api/nfc/urls` - Get all NFC URLs with QR codes
+- `GET /api/nfc/session/status` - Check NFC session status
+- `GET /api/locations` - Get all locations
+- `POST /api/locations` - Create custom location
+- `PUT /api/locations/{name}` - Rename location
+- `DELETE /api/locations/{name}` - Delete location
 - `WS /ws/status` - WebSocket endpoint for real-time status updates
 
 ## Project Structure
@@ -185,6 +209,7 @@ filabridge/
 ├── prusalink.go           # PrusaLink API client
 ├── spoolman.go            # Spoolman API client
 ├── bridge.go              # Core monitoring and tracking logic
+├── nfc.go                 # NFC session management and tag handling
 ├── web.go                 # HTTP server and web interface
 ├── templates/             # HTML templates
 ├── go.mod                 # Go module definition
@@ -219,6 +244,12 @@ filabridge/
    - Check the error notifications in the web interface
    - Acknowledge errors after manually updating Spoolman
    - Review logs for detailed error information
+
+6. **NFC tag issues**:
+   - Ensure NFC tags are NTAG213, NTAG215, or NTAG216 format
+   - Use NFC Tools Pro to verify tag is properly formatted
+   - QR codes encode the full URL - scan with NFC Tools Pro to program tags
+   - Sessions expire after 5 minutes - complete both scans within the timeout
 
 ### Logs
 
@@ -267,7 +298,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 - [x] Real-time WebSocket updates
 - [x] Enhanced spool search functionality
 - [x] Print error handling and acknowledgment
-- [ ] NFC Support
+- [x] NFC Support
 - [ ] Mobile-responsive UI improvements
 
 ## Support the Project

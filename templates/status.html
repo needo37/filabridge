@@ -1,0 +1,128 @@
+<!-- Filament Status Tab (Default) -->
+<div id="status-tab" class="tab-content active">
+    <div id="status">
+        <h2>Printer Status</h2>
+
+        {{if .IsFirstRun}}
+        <div class="welcome-banner">
+            <h3>🎉 Welcome to FilaBridge!</h3>
+            <p>This appears to be your first time running FilaBridge. Let's get you set up with your printer configuration.</p>
+            <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h4 style="margin-top: 0;">Quick Setup Steps:</h4>
+                <ol>
+                    <li><strong>Start Spoolman:</strong> <code>docker run -d --name spoolman -p 8000:8000 -v spoolman-data:/home/spoolman/data ghcr.io/donkie/spoolman:latest</code></li>
+                    <li><strong>Configure Printers:</strong> Click 'Configure Now' below to set your printer IP addresses</li>
+                    <li><strong>Map Spools:</strong> Assign your filament spools to specific toolheads</li>
+                    <li><strong>Start Printing:</strong> The system will automatically track filament usage!</li>
+                </ol>
+            </div>
+            <button class="btn" onclick="toggleConfig()">🚀 Start Configuration</button>
+        </div>
+        {{end}}
+
+        {{if not .SpoolmanConnected}}
+        <div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 20px; margin: 20px 0; border-radius: 8px;">
+            <h4 style="margin-top: 0;">⚠️ Spoolman Connection Issue</h4>
+            <p>Cannot connect to Spoolman. Please ensure Spoolman is running and the URL is correct.</p>
+            {{if .SpoolmanError}}
+            <p><strong>Error:</strong> {{.SpoolmanError}}</p>
+            {{end}}
+        </div>
+        {{end}}
+
+        {{if .HasPrintErrors}}
+        <div id="print-errors-container">
+            {{range .PrintErrors}}
+            <div class="print-error" data-error-id="{{.ID}}" style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 20px; margin: 20px 0; border-radius: 8px;">
+                <h4 style="margin-top: 0;">⚠️ Print Processing Failed</h4>
+                <p><strong>Printer:</strong> {{.PrinterName}}</p>
+                <p><strong>File:</strong> {{.Filename}}</p>
+                <p><strong>Time:</strong> <span class="error-timestamp" data-timestamp="{{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}">{{.Timestamp.Format "2006-01-02 15:04:05"}}</span></p>
+                <p><strong>Error:</strong> {{.Error}}</p>
+                <p><strong>Action Required:</strong> Please update Spoolman manually with the correct filament usage for this print.</p>
+                <button class="btn" onclick="acknowledgeError('{{.ID}}')" style="background: #dc3545; margin-top: 10px;">Acknowledge</button>
+            </div>
+            {{end}}
+        </div>
+        {{end}}
+
+        {{range $printerID, $printerConfig := .Printers}}
+        {{$printerData := index $.Status.Printers $printerID}}
+        <div class="printer" data-printer-id="{{$printerID}}">
+            <div class="printer-header">
+                <h3>{{$printerData.Name}}</h3>
+                <span class="status {{$printerData.State}}">
+                    {{$printerData.State}}
+                </span>
+            </div>
+            
+            <p><strong>Model:</strong> {{$printerConfig.Model}} ({{$printerConfig.Toolheads}} toolhead{{if ne $printerConfig.Toolheads 1}}s{{end}})</p>
+
+            <div class="mapping-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3>Toolhead Mappings</h3>
+                </div>
+                <h4>Map Spools to Toolheads</h4>
+                <div style="margin-top: 15px;">
+                    {{$mapping := index $.Status.ToolheadMappings $printerID}}
+                    {{range $toolheadID := generateToolheadIDs $printerConfig.Toolheads}}
+                    {{$mappedSpool := index $mapping $toolheadID}}
+                    <div class="toolhead-mapping-row" style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px;" data-printer-id="{{$printerID}}" data-toolhead-id="{{$toolheadID}}">
+                        <div class="toolhead-label" style="min-width: 100px; font-weight: bold;">Toolhead {{$toolheadID}}:</div>
+                        <div class="custom-dropdown" style="flex: 1;">
+                            <div class="dropdown-button">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    {{if $mappedSpool.SpoolID}}
+                                    {{range $.Spools}}
+                                    {{if eq .ID $mappedSpool.SpoolID}}
+                                    <div class="color-swatch" data-color="{{.Filament.ColorHex}}"></div>
+                                    <span>[{{.ID}}] {{if .Material}}{{.Material}}{{else}}Unknown Material{{end}} - {{if .Brand}}{{.Brand}}{{else}}Unknown Brand{{end}} - {{if .Name}}{{.Name}}{{else}}Unnamed Spool{{end}}{{if .RemainingWeight}} ({{printf "%.0f" .RemainingWeight}}g remaining){{end}}</span>
+                                    {{end}}
+                                    {{end}}
+                                    {{else}}
+                                    <div class="color-swatch" style="background-color: #ccc;"></div>
+                                    <span>Empty</span>
+                                    {{end}}
+                                </div>
+                                <span class="dropdown-arrow">▼</span>
+                            </div>
+                            <div class="dropdown-content">
+                                <div class="dropdown-search-container">
+                                    <input type="text" class="dropdown-search" placeholder="Search spools..." autocomplete="off">
+                                </div>
+                                <div class="dropdown-options-container">
+                                    <div class="dropdown-option" data-value="" data-color="">
+                                        <div class="color-swatch" style="background-color: #ccc;"></div>
+                                        <div class="option-text">Empty</div>
+                                    </div>
+                                    {{range $.Spools}}
+                                    <div class="dropdown-option" data-value="{{.ID}}" data-color="{{.Filament.ColorHex}}" {{if $mappedSpool.SpoolID}}{{if eq .ID $mappedSpool.SpoolID}}class="selected"{{end}}{{end}}>
+                                        <div class="color-swatch" data-color="{{.Filament.ColorHex}}"></div>
+                                        <div class="option-text">[{{.ID}}] {{if .Material}}{{.Material}}{{else}}Unknown Material{{end}} - {{if .Brand}}{{.Brand}}{{else}}Unknown Brand{{end}} - {{if .Name}}{{.Name}}{{else}}Unnamed Spool{{end}}{{if .RemainingWeight}} ({{printf "%.0f" .RemainingWeight}}g remaining){{end}}</div>
+                                    </div>
+                                    {{end}}
+                                    <div class="dropdown-no-results">No spools found</div>
+                                </div>
+                            </div>
+                            <input type="hidden" name="spool_{{$printerID}}_{{$toolheadID}}" value="{{if $mappedSpool.SpoolID}}{{$mappedSpool.SpoolID}}{{end}}">
+                        </div>
+                        <button class="edit-spool-btn {{if not $mappedSpool.SpoolID}}hidden{{end}}" 
+                                data-spool-id="{{if $mappedSpool.SpoolID}}{{$mappedSpool.SpoolID}}{{end}}"
+                                onclick="openSpoolmanEdit(this.dataset.spoolId)"
+                                {{if $mappedSpool.SpoolID}}
+                                {{range $.Spools}}
+                                {{if eq .ID $mappedSpool.SpoolID}}
+                                data-color-hex="{{.Filament.ColorHex}}"
+                                {{end}}
+                                {{end}}
+                                {{end}}>
+                            ✏️ Edit
+                        </button>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+    </div>
+</div>

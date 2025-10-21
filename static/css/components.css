@@ -1,0 +1,209 @@
+/* FilaBridge Dashboard - Component Styles */
+
+/* Buttons */
+.btn {
+    background: #28a745;
+    color: white;
+    padding: 15px 30px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+    text-decoration: none;
+    display: inline-block;
+    margin: 10px 5px;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    background: #218838;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.btn-secondary {
+    background: #6c757d;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+}
+
+.btn-danger {
+    background: #dc3545;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+}
+
+.btn-small {
+    padding: 5px 12px;
+    font-size: 12px;
+    min-width: 60px;
+}
+
+/* Form Elements */
+.form-group {
+    margin-bottom: 20px;
+    overflow: visible;
+}
+
+.form-group label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #fff;
+}
+
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    font-size: 16px;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    transition: border-color 0.3s ease;
+}
+
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.form-group input[type="password"] {
+    border-color: #6f42c1;
+}
+
+.form-group small {
+    color: #ccc;
+    font-size: 0.9em;
+    margin-top: 5px;
+    display: block;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+/* Configuration Sections */
+.config-section {
+    background: rgba(255,255,255,0.05);
+    padding: 25px;
+    margin: 20px 0;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.1);
+    overflow: visible;
+}
+
+.config-section h3 {
+    margin: 0 0 20px 0;
+    color: #fff;
+}
+
+.advanced-settings {
+    background: rgba(255,255,255,0.05);
+    padding: 20px;
+    border-radius: 8px;
+    margin-top: 15px;
+}
+
+.help-text {
+    color: #ccc;
+    font-style: italic;
+    margin-bottom: 20px;
+    padding: 10px;
+    background: rgba(255,193,7,0.1);
+    border-left: 3px solid #ffc107;
+    border-radius: 4px;
+}
+
+.timeout-settings {
+    display: grid;
+    gap: 15px;
+}
+
+/* Status Indicators */
+.status {
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 0.8em;
+}
+
+.status.idle { 
+    background: #d4edda; 
+    color: #155724; 
+}
+
+.status.printing { 
+    background: #fff3cd; 
+    color: #856404; 
+}
+
+.status.offline { 
+    background: #f8d7da; 
+    color: #721c24; 
+}
+
+.status.not_configured { 
+    background: #e2e3e5; 
+    color: #383d41; 
+}
+
+/* Color Swatches */
+.color-swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid #666;
+    flex-shrink: 0;
+    background-color: #ccc;
+}
+
+/* Toolhead Specific Styles */
+.toolhead-select {
+    background: rgba(255,255,255,0.1) !important;
+    color: #fff !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
+    padding: 8px !important;
+    border-radius: 4px !important;
+}
+
+.toolhead-select option {
+    background: #1a1a1a !important;
+    color: #fff !important;
+}
+
+.toolhead-label {
+    color: #fff !important;
+}
+
+.edit-spool-btn {
+    background: #007bff; /* Fallback color */
+    color: white;
+    padding: 8px 12px;
+    border: 1px solid transparent;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    margin-left: 25px;
+}
+
+.edit-spool-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    filter: brightness(0.8);
+}
+
+.edit-spool-btn.hidden {
+    display: none;
+}

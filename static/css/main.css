@@ -1,0 +1,109 @@
+/* FilaBridge Dashboard - Main Styles */
+
+/* Base Layout */
+body { 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+    margin: 0; 
+    padding: 20px; 
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+}
+
+.container { 
+    max-width: 1200px; 
+    margin: 0 auto; 
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    overflow: visible;
+}
+
+.header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 30px;
+    text-align: center;
+}
+
+.header h1 {
+    margin: 0;
+    font-size: 2.5em;
+    font-weight: 300;
+}
+
+.header p {
+    margin: 10px 0 0 0;
+    opacity: 0.9;
+    font-size: 1.1em;
+}
+
+.content {
+    padding: 0;
+    background: #1a1a1a;
+    color: #fff;
+}
+
+/* Welcome Banner */
+.welcome-banner {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    padding: 25px;
+    margin: 20px 0;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.welcome-banner h3 {
+    margin: 0 0 15px 0;
+    font-size: 1.5em;
+}
+
+.welcome-banner ol {
+    text-align: left;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.welcome-banner li {
+    margin: 8px 0;
+}
+
+/* Help Section */
+.help-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 25px;
+    margin: 20px 0;
+    border-radius: 10px;
+}
+
+.help-section h4 {
+    margin: 0 0 15px 0;
+}
+
+.help-section ol {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.help-section li {
+    margin: 8px 0;
+}
+
+/* Utility Classes */
+.hidden { 
+    display: none; 
+}
+
+/* Section Headers */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.section-header h2 {
+    margin: 0;
+    color: #fff;
+}

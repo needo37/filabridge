@@ -38,6 +38,9 @@ func main() {
 		log.Fatalf("Failed to update bridge config: %v", err)
 	}
 
+	// Start location sync (runs in background)
+	bridge.StartLocationSync()
+
 	// Override port from config if not specified
 	if *port == DefaultWebPort && config.WebPort != DefaultWebPort {
 		*port = config.WebPort
@@ -46,6 +49,22 @@ func main() {
 	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start NFC session cleanup background task
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute) // Clean up every minute
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := bridge.cleanupExpiredSessions(); err != nil {
+					log.Printf("Error cleaning up NFC sessions: %v", err)
+				}
+			case <-sigChan:
+				return
+			}
+		}
+	}()
 
 	if *webOnly {
 		// Run only web interface

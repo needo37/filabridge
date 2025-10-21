@@ -40,10 +40,19 @@ Managing filament inventory across multiple 3D printers is tedious. FilaBridge a
 
 No more manual updates or guesswork about remaining filament!
 
-## Screenshot
+## Screenshots
 
 ![FilaBridge Dashboard](https://github.com/needo37/filabridge/blob/main/screenshots/dashboard.png?raw=true)
-*FilaBridge web interface showing printer status and filament mappings*
+*FilaBridge main dashboard showing printer status and toolhead mappings*
+
+![Spool Tags Management](https://github.com/needo37/filabridge/blob/main/screenshots/spool_tags.png?raw=true)
+*NFC Management interface for generating QR codes for individual spools*
+
+![Filament Tags Management](https://github.com/needo37/filabridge/blob/main/screenshots/filament_tags.png?raw=true)
+*Filament type QR code generation for new unopened spools*
+
+![Location Tags Management](https://github.com/needo37/filabridge/blob/main/screenshots/location_tags.png?raw=true)
+*Location management interface for creating printer toolhead and storage location QR codes*
 
 ## Prerequisites
 

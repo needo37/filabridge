@@ -17,6 +17,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Copy templates directory separately for better layer caching
 COPY templates/ ./templates/
 
+# Copy static files directory
+COPY static/ ./static/
+
 # Copy source code
 COPY *.go ./
 

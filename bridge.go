@@ -774,12 +774,26 @@ func (b *FilamentBridge) AcknowledgePrintError(errorID string) error {
 	return fmt.Errorf("print error not found: %s", errorID)
 }
 
+// sanitizeErrorID replaces problematic characters in error IDs to make them URL-safe
+func sanitizeErrorID(s string) string {
+	// Replace forward slashes with underscores
+	s = strings.ReplaceAll(s, "/", "_")
+	// Replace spaces with underscores
+	s = strings.ReplaceAll(s, " ", "_")
+	// Replace backslashes with underscores
+	s = strings.ReplaceAll(s, "\\", "_")
+	return s
+}
+
 // addPrintError adds a new print error
 func (b *FilamentBridge) addPrintError(printerName, filename, errorMsg string) {
 	b.errorMutex.Lock()
 	defer b.errorMutex.Unlock()
 
-	errorID := fmt.Sprintf("%s_%s_%d", printerName, filename, time.Now().Unix())
+	// Sanitize printer name and filename to ensure URL-safe error IDs
+	sanitizedPrinterName := sanitizeErrorID(printerName)
+	sanitizedFilename := sanitizeErrorID(filename)
+	errorID := fmt.Sprintf("%s_%s_%d", sanitizedPrinterName, sanitizedFilename, time.Now().Unix())
 	b.printErrors[errorID] = PrintError{
 		ID:           errorID,
 		PrinterName:  printerName,

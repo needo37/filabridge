@@ -710,8 +710,8 @@ func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, file
 		return fmt.Errorf("%s", errorMsg)
 	}
 
-	// Download and parse the .bgcode file for filament usage
-	log.Printf("Analyzing .bgcode file for filament usage: %s", filename)
+	// Download and parse the G-code file (.gcode or .bgcode) for filament usage
+	log.Printf("Analyzing G-code file for filament usage: %s", filename)
 
 	// Download with retry logic
 	gcodeContent, err := prusaClient.GetGcodeFileWithRetry(filename, b.config.PrusaLinkFileDownloadTimeout)
@@ -736,7 +736,7 @@ func (b *FilamentBridge) handlePrusaLinkPrintFinished(config PrinterConfig, file
 		return fmt.Errorf("%s", errorMsg)
 	}
 
-	log.Printf("Successfully parsed .bgcode file for filament usage: %+v", filamentUsage)
+	log.Printf("Successfully parsed G-code file for filament usage: %+v", filamentUsage)
 
 	// Process filament usage using helper function
 	if err := b.processFilamentUsage(printerName, filamentUsage, filename); err != nil {

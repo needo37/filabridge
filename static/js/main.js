@@ -45,17 +45,10 @@ function loadConfiguration() {
                         <input type="text" id="spoolman_url" value="${config.spoolman_url || ''}" placeholder="http://localhost:8000">
                         <small>URL where Spoolman is running</small>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label><strong>Poll Interval (seconds):</strong></label>
-                            <input type="number" id="poll_interval" value="${config.poll_interval || '30'}" min="10" max="300">
-                            <small>How often to check printer status</small>
-                        </div>
-                        <div class="form-group">
-                            <label><strong>Web Port:</strong></label>
-                            <input type="text" id="web_port" value="${config.web_port || '5000'}" placeholder="5000">
-                            <small>Port for this web interface</small>
-                        </div>
+                    <div class="form-group">
+                        <label><strong>Poll Interval (seconds):</strong></label>
+                        <input type="number" id="poll_interval" value="${config.poll_interval || '30'}" min="10" max="300">
+                        <small>How often to check printer status</small>
                     </div>
                     <div style="margin-top: 20px; text-align: center;">
                         <button class="btn" onclick="saveConfiguration()">💾 Save Configuration</button>
@@ -72,8 +65,7 @@ function loadConfiguration() {
 function saveConfiguration() {
     const config = {
         spoolman_url: document.getElementById('spoolman_url').value,
-        poll_interval: document.getElementById('poll_interval').value,
-        web_port: document.getElementById('web_port').value
+        poll_interval: document.getElementById('poll_interval').value
     };
     
     fetch('/api/config', {

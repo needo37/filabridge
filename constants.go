@@ -29,6 +29,8 @@ const (
 	ConfigKeyPrusaLinkTimeout             = "prusalink_timeout"
 	ConfigKeyPrusaLinkFileDownloadTimeout = "prusalink_file_download_timeout"
 	ConfigKeySpoolmanTimeout              = "spoolman_timeout"
+	ConfigKeySpoolmanUsername             = "spoolman_username"
+	ConfigKeySpoolmanPassword             = "spoolman_password"
 )
 
 // HTTP timeouts

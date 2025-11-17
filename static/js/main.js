@@ -46,6 +46,16 @@ function loadConfiguration() {
                         <small>URL where Spoolman is running</small>
                     </div>
                     <div class="form-group">
+                        <label><strong>Spoolman Username (optional):</strong></label>
+                        <input type="text" id="spoolman_username" value="${config.spoolman_username || ''}" placeholder="Leave empty if not using basic auth">
+                        <small>Username for Spoolman basic authentication (optional)</small>
+                    </div>
+                    <div class="form-group">
+                        <label><strong>Spoolman Password (optional):</strong></label>
+                        <input type="password" id="spoolman_password" value="${config.spoolman_password || ''}" placeholder="Leave empty if not using basic auth">
+                        <small>Password for Spoolman basic authentication (optional)</small>
+                    </div>
+                    <div class="form-group">
                         <label><strong>Poll Interval (seconds):</strong></label>
                         <input type="number" id="poll_interval" value="${config.poll_interval || '30'}" min="10" max="300">
                         <small>How often to check printer status</small>
@@ -65,6 +75,8 @@ function loadConfiguration() {
 function saveConfiguration() {
     const config = {
         spoolman_url: document.getElementById('spoolman_url').value,
+        spoolman_username: document.getElementById('spoolman_username').value,
+        spoolman_password: document.getElementById('spoolman_password').value,
         poll_interval: document.getElementById('poll_interval').value
     };
     

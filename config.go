@@ -32,6 +32,8 @@ type FilamentSpool struct {
 // Config holds all configuration for the application
 type Config struct {
 	SpoolmanURL                  string
+	SpoolmanUsername             string
+	SpoolmanPassword             string
 	PollInterval                 time.Duration
 	LocationSyncInterval         time.Duration
 	DBFile                       string
@@ -90,6 +92,8 @@ func LoadConfig(bridge *FilamentBridge) (*Config, error) {
 
 	config := &Config{
 		SpoolmanURL:                  configValues[ConfigKeySpoolmanURL],
+		SpoolmanUsername:             configValues[ConfigKeySpoolmanUsername],
+		SpoolmanPassword:             configValues[ConfigKeySpoolmanPassword],
 		PollInterval:                 time.Duration(pollInterval) * time.Second,
 		LocationSyncInterval:         time.Duration(locationSyncInterval) * time.Minute,
 		DBFile:                       getDBFilePath(),

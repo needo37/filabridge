@@ -83,7 +83,7 @@ type PrinterData struct {
 func NewFilamentBridge(config *Config) (*FilamentBridge, error) {
 	bridge := &FilamentBridge{
 		config:           config,
-		spoolman:         NewSpoolmanClient(DefaultSpoolmanURL, SpoolmanTimeout), // Default URL and timeout, will be updated
+		spoolman:         NewSpoolmanClient(DefaultSpoolmanURL, SpoolmanTimeout, "", ""), // Default URL and timeout, will be updated
 		wasPrinting:      make(map[string]bool),
 		currentJobFile:   make(map[string]string),
 		processingPrints: make(map[string]bool),
@@ -97,7 +97,7 @@ func NewFilamentBridge(config *Config) (*FilamentBridge, error) {
 
 	// Update Spoolman URL and timeout if config is provided
 	if config != nil && config.SpoolmanURL != "" {
-		bridge.spoolman = NewSpoolmanClient(config.SpoolmanURL, config.SpoolmanTimeout)
+		bridge.spoolman = NewSpoolmanClient(config.SpoolmanURL, config.SpoolmanTimeout, config.SpoolmanUsername, config.SpoolmanPassword)
 	}
 
 	return bridge, nil
@@ -196,6 +196,8 @@ func (b *FilamentBridge) initializeDefaultConfig() error {
 		ConfigKeyPrinterIPs:                   "", // Comma-separated list of printer IP addresses
 		ConfigKeyAPIKey:                       "", // PrusaLink API key for authentication
 		ConfigKeySpoolmanURL:                  DefaultSpoolmanURL,
+		ConfigKeySpoolmanUsername:             "", // Spoolman basic auth username (optional)
+		ConfigKeySpoolmanPassword:             "", // Spoolman basic auth password (optional)
 		ConfigKeyPollInterval:                 fmt.Sprintf("%d", DefaultPollInterval),
 		ConfigKeyWebPort:                      DefaultWebPort,
 		ConfigKeyPrusaLinkTimeout:             fmt.Sprintf("%d", PrusaLinkTimeout),
@@ -232,6 +234,8 @@ func getConfigDescription(key string) string {
 		ConfigKeyPrinterIPs:                   "Comma-separated list of printer IP addresses for PrusaLink",
 		ConfigKeyAPIKey:                       "PrusaLink API key for authentication",
 		ConfigKeySpoolmanURL:                  "URL of Spoolman instance",
+		ConfigKeySpoolmanUsername:             "Spoolman basic auth username (optional, leave empty if not using basic auth)",
+		ConfigKeySpoolmanPassword:             "Spoolman basic auth password (optional, leave empty if not using basic auth)",
 		ConfigKeyPollInterval:                 "Polling interval in seconds",
 		ConfigKeyWebPort:                      "Port for web interface",
 		ConfigKeyPrusaLinkTimeout:             "PrusaLink API timeout in seconds",
@@ -378,9 +382,12 @@ func (b *FilamentBridge) ReloadConfig() error {
 		return fmt.Errorf("failed to reload config: %w", err)
 	}
 
-	// Only lock briefly to swap the config pointer
+	// Only lock briefly to swap the config pointer and recreate SpoolmanClient
 	b.mutex.Lock()
 	b.config = config
+	if config.SpoolmanURL != "" {
+		b.spoolman = NewSpoolmanClient(config.SpoolmanURL, config.SpoolmanTimeout, config.SpoolmanUsername, config.SpoolmanPassword)
+	}
 	b.mutex.Unlock()
 
 	return nil
@@ -404,7 +411,7 @@ func (b *FilamentBridge) UpdateConfig(config *Config) error {
 	defer b.mutex.Unlock()
 
 	b.config = config
-	b.spoolman = NewSpoolmanClient(config.SpoolmanURL, config.SpoolmanTimeout)
+	b.spoolman = NewSpoolmanClient(config.SpoolmanURL, config.SpoolmanTimeout, config.SpoolmanUsername, config.SpoolmanPassword)
 
 	return nil
 }

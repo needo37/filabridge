@@ -158,36 +158,17 @@ jobs:
               tail -n +$FIRST_VERSION_LINE CHANGELOG.md > /tmp/body.txt
             else
               # No version entries found, use entire file as body
-              cat > /tmp/header.txt << 'EOF'
-# Changelog
-
-All notable changes to FilaBridge will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-EOF
+              printf '# Changelog\n\nAll notable changes to FilaBridge will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n' > /tmp/header.txt
               cp CHANGELOG.md /tmp/body.txt
             fi
           else
             # Create header if CHANGELOG.md doesn't exist
-            cat > /tmp/header.txt << 'EOF'
-# Changelog
-
-All notable changes to FilaBridge will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-EOF
+            printf '# Changelog\n\nAll notable changes to FilaBridge will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n' > /tmp/header.txt
             touch /tmp/body.txt
           fi
           
           # Build the new version entry
-          cat > /tmp/new_entry.txt << 'EOF'
-## [VERSION_PLACEHOLDER] - DATE_PLACEHOLDER
-
-EOF
+          printf '## [VERSION_PLACEHOLDER] - DATE_PLACEHOLDER\n\n' > /tmp/new_entry.txt
           
           # Replace placeholders in new entry
           sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" /tmp/new_entry.txt
@@ -374,12 +355,17 @@ EOF
           printf '%s' "$CHANGELOG"
           echo ""
           
-          # Output the changelog using heredoc for proper newline handling
+          # Output the changelog using multiline output syntax
+          # Use a variable to construct the delimiter line to avoid YAML parsing issues
+          DELIM="__CHANGELOG_END__"
+          # Construct the header line by concatenating parts
+          HEADER_LINE="CHANGELOG"
+          HEADER_LINE="${HEADER_LINE}<<"
+          HEADER_LINE="${HEADER_LINE}${DELIM}"
           {
-            echo "CHANGELOG<<EOF"
+            echo "${HEADER_LINE}"
             printf '%s' "$CHANGELOG"
-            echo ""
-            echo "EOF"
+            printf '\n%s\n' "${DELIM}"
           } >> $GITHUB_OUTPUT
 
       - name: Create Release

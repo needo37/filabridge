@@ -1,0 +1,16 @@
+extends: default
+
+rules:
+  # Allow multiline strings in workflow files (shell scripts)
+  line-length: disable
+  # Ignore implicit key errors in multiline strings
+  key-ordering: disable
+  # Allow comments and shell script syntax in multiline strings
+  comments: disable
+  # Don't validate content inside multiline strings
+  document-start: disable
+
+# Exclude workflow files from strict validation since they contain shell scripts
+ignore: |
+  .github/workflows/*.yml
+

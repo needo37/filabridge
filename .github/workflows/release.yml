@@ -91,8 +91,11 @@ jobs:
           echo "Generating changelog for version: $VERSION"
           
           # Get commits since last tag, excluding release commits
-          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
+          # Get all tags sorted by version, then find the one before current tag
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          LAST_TAG=$(git tag --sort=-version:refname | grep -A1 "^${CURRENT_TAG}$" | tail -n 1 || echo "")
+          if [ -z "$LAST_TAG" ] || [ "$LAST_TAG" = "$CURRENT_TAG" ]; then
+            # No previous tag found, get all commits
             COMMITS=$(git log --pretty=format:"%s" HEAD)
           else
             COMMITS=$(git log --pretty=format:"%s" $LAST_TAG..HEAD)
@@ -112,22 +115,33 @@ jobs:
               continue
             fi
             
-            # Categorize commits by conventional commit prefixes
-            if [[ "$commit" =~ ^feat: ]]; then
-              FEATURES+=("- ${commit#feat: }")
-            elif [[ "$commit" =~ ^(fix|bug): ]]; then
-              # Remove both fix: and bug: prefixes
-              clean_commit="${commit#fix: }"
-              clean_commit="${clean_commit#bug: }"
+            # Categorize commits by conventional commit prefixes and strip prefixes properly
+            if [[ "$commit" =~ ^feat(\(.+\))?:\ (.+) ]]; then
+              # Extract message after "feat: " or "feat(scope): "
+              clean_commit="${commit#feat*: }"
+              FEATURES+=("- $clean_commit")
+            elif [[ "$commit" =~ ^(fix|bug)(\(.+\))?:\ (.+) ]]; then
+              # Remove both fix: and bug: prefixes (with optional scope)
+              if [[ "$commit" =~ ^fix ]]; then
+                clean_commit="${commit#fix*: }"
+              else
+                clean_commit="${commit#bug*: }"
+              fi
               FIXES+=("- $clean_commit")
-            elif [[ "$commit" =~ ^(chore|refactor|style): ]]; then
-              # Remove prefixes for different types
-              clean_commit="${commit#chore: }"
-              clean_commit="${clean_commit#refactor: }"
-              clean_commit="${clean_commit#style: }"
+            elif [[ "$commit" =~ ^(chore|refactor|style)(\(.+\))?:\ (.+) ]]; then
+              # Remove prefixes for different types (with optional scope)
+              if [[ "$commit" =~ ^chore ]]; then
+                clean_commit="${commit#chore*: }"
+              elif [[ "$commit" =~ ^refactor ]]; then
+                clean_commit="${commit#refactor*: }"
+              else
+                clean_commit="${commit#style*: }"
+              fi
               CHANGES+=("- $clean_commit")
-            elif [[ "$commit" =~ ^docs: ]]; then
-              DOCS+=("- ${commit#docs: }")
+            elif [[ "$commit" =~ ^docs(\(.+\))?:\ (.+) ]]; then
+              # Extract message after "docs: " or "docs(scope): "
+              clean_commit="${commit#docs*: }"
+              DOCS+=("- $clean_commit")
             else
               # Include any commit that doesn't match conventional commit format
               OTHER+=("- $commit")
@@ -136,27 +150,44 @@ jobs:
           
           # Read existing CHANGELOG.md if it exists
           if [ -f "CHANGELOG.md" ]; then
-            # Extract header (first 8 lines) and body (rest)
-            head -n 8 CHANGELOG.md > /tmp/header.txt
-            tail -n +9 CHANGELOG.md > /tmp/body.txt
+            # Find the first version entry line (starts with ## [)
+            FIRST_VERSION_LINE=$(grep -n "^## \[" CHANGELOG.md | head -n 1 | cut -d: -f1)
+            if [ -n "$FIRST_VERSION_LINE" ]; then
+              # Extract header (everything before first version entry) and body (rest)
+              head -n $((FIRST_VERSION_LINE - 1)) CHANGELOG.md > /tmp/header.txt
+              tail -n +$FIRST_VERSION_LINE CHANGELOG.md > /tmp/body.txt
+            else
+              # No version entries found, use entire file as body
+              cat > /tmp/header.txt << 'EOF'
+# Changelog
+
+All notable changes to FilaBridge will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+EOF
+              cp CHANGELOG.md /tmp/body.txt
+            fi
           else
             # Create header if CHANGELOG.md doesn't exist
             cat > /tmp/header.txt << 'EOF'
-          # Changelog
-          
-          All notable changes to FilaBridge will be documented in this file.
-          
-          The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-          and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-          EOF
+# Changelog
+
+All notable changes to FilaBridge will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+EOF
             touch /tmp/body.txt
           fi
           
           # Build the new version entry
           cat > /tmp/new_entry.txt << 'EOF'
-          ## [VERSION_PLACEHOLDER] - DATE_PLACEHOLDER
-          
-          EOF
+## [VERSION_PLACEHOLDER] - DATE_PLACEHOLDER
+
+EOF
           
           # Replace placeholders in new entry
           sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" /tmp/new_entry.txt
@@ -234,8 +265,11 @@ jobs:
           echo "Extracting changelog for release notes: $VERSION"
           
           # Get commits since last tag, excluding release commits
-          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
+          # Get all tags sorted by version, then find the one before current tag
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          LAST_TAG=$(git tag --sort=-version:refname | grep -A1 "^${CURRENT_TAG}$" | tail -n 1 || echo "")
+          if [ -z "$LAST_TAG" ] || [ "$LAST_TAG" = "$CURRENT_TAG" ]; then
+            # No previous tag found, get all commits
             COMMITS=$(git log --pretty=format:"%s" HEAD)
           else
             COMMITS=$(git log --pretty=format:"%s" $LAST_TAG..HEAD)
@@ -255,76 +289,96 @@ jobs:
               continue
             fi
             
-            # Categorize commits by conventional commit prefixes
-            if [[ "$commit" =~ ^feat: ]]; then
-              FEATURES+=("- ${commit#feat: }")
-            elif [[ "$commit" =~ ^(fix|bug): ]]; then
-              # Remove both fix: and bug: prefixes
-              clean_commit="${commit#fix: }"
-              clean_commit="${clean_commit#bug: }"
+            # Categorize commits by conventional commit prefixes and strip prefixes properly
+            if [[ "$commit" =~ ^feat(\(.+\))?:\ (.+) ]]; then
+              # Extract message after "feat: " or "feat(scope): "
+              clean_commit="${commit#feat*: }"
+              FEATURES+=("- $clean_commit")
+            elif [[ "$commit" =~ ^(fix|bug)(\(.+\))?:\ (.+) ]]; then
+              # Remove both fix: and bug: prefixes (with optional scope)
+              if [[ "$commit" =~ ^fix ]]; then
+                clean_commit="${commit#fix*: }"
+              else
+                clean_commit="${commit#bug*: }"
+              fi
               FIXES+=("- $clean_commit")
-            elif [[ "$commit" =~ ^(chore|refactor|style): ]]; then
-              # Remove prefixes for different types
-              clean_commit="${commit#chore: }"
-              clean_commit="${clean_commit#refactor: }"
-              clean_commit="${clean_commit#style: }"
+            elif [[ "$commit" =~ ^(chore|refactor|style)(\(.+\))?:\ (.+) ]]; then
+              # Remove prefixes for different types (with optional scope)
+              if [[ "$commit" =~ ^chore ]]; then
+                clean_commit="${commit#chore*: }"
+              elif [[ "$commit" =~ ^refactor ]]; then
+                clean_commit="${commit#refactor*: }"
+              else
+                clean_commit="${commit#style*: }"
+              fi
               CHANGES+=("- $clean_commit")
-            elif [[ "$commit" =~ ^docs: ]]; then
-              DOCS+=("- ${commit#docs: }")
+            elif [[ "$commit" =~ ^docs(\(.+\))?:\ (.+) ]]; then
+              # Extract message after "docs: " or "docs(scope): "
+              clean_commit="${commit#docs*: }"
+              DOCS+=("- $clean_commit")
             else
               # Include any commit that doesn't match conventional commit format
               OTHER+=("- $commit")
             fi
           done <<< "$COMMITS"
           
-          # Build the changelog sections
+          # Build the changelog sections directly
           CHANGELOG=""
           
           if [ ${#FEATURES[@]} -gt 0 ]; then
             CHANGELOG="${CHANGELOG}### Added"$'\n'
-            printf '%s\n' "${FEATURES[@]}" >> /tmp/features.txt
-            CHANGELOG="${CHANGELOG}$(cat /tmp/features.txt)"$'\n\n'
-            rm -f /tmp/features.txt
+            for item in "${FEATURES[@]}"; do
+              CHANGELOG="${CHANGELOG}${item}"$'\n'
+            done
+            CHANGELOG="${CHANGELOG}"$'\n'
           fi
           
           if [ ${#FIXES[@]} -gt 0 ]; then
             CHANGELOG="${CHANGELOG}### Fixed"$'\n'
-            printf '%s\n' "${FIXES[@]}" >> /tmp/fixes.txt
-            CHANGELOG="${CHANGELOG}$(cat /tmp/fixes.txt)"$'\n\n'
-            rm -f /tmp/fixes.txt
+            for item in "${FIXES[@]}"; do
+              CHANGELOG="${CHANGELOG}${item}"$'\n'
+            done
+            CHANGELOG="${CHANGELOG}"$'\n'
           fi
           
           if [ ${#CHANGES[@]} -gt 0 ]; then
             CHANGELOG="${CHANGELOG}### Changed"$'\n'
-            printf '%s\n' "${CHANGES[@]}" >> /tmp/changes.txt
-            CHANGELOG="${CHANGELOG}$(cat /tmp/changes.txt)"$'\n\n'
-            rm -f /tmp/changes.txt
+            for item in "${CHANGES[@]}"; do
+              CHANGELOG="${CHANGELOG}${item}"$'\n'
+            done
+            CHANGELOG="${CHANGELOG}"$'\n'
           fi
           
           if [ ${#DOCS[@]} -gt 0 ]; then
             CHANGELOG="${CHANGELOG}### Documentation"$'\n'
-            printf '%s\n' "${DOCS[@]}" >> /tmp/docs.txt
-            CHANGELOG="${CHANGELOG}$(cat /tmp/docs.txt)"$'\n\n'
-            rm -f /tmp/docs.txt
+            for item in "${DOCS[@]}"; do
+              CHANGELOG="${CHANGELOG}${item}"$'\n'
+            done
+            CHANGELOG="${CHANGELOG}"$'\n'
           fi
           
           if [ ${#OTHER[@]} -gt 0 ]; then
             CHANGELOG="${CHANGELOG}### Other"$'\n'
-            printf '%s\n' "${OTHER[@]}" >> /tmp/other.txt
-            CHANGELOG="${CHANGELOG}$(cat /tmp/other.txt)"$'\n\n'
-            rm -f /tmp/other.txt
+            for item in "${OTHER[@]}"; do
+              CHANGELOG="${CHANGELOG}${item}"$'\n'
+            done
+            CHANGELOG="${CHANGELOG}"$'\n'
           fi
           
-          # Remove trailing newlines
-          CHANGELOG=$(echo -n "$CHANGELOG" | sed 's/\n*$//')
+          # Remove trailing newlines (but keep at least one if content exists)
+          if [ -n "$CHANGELOG" ]; then
+            CHANGELOG=$(printf '%s' "$CHANGELOG" | sed -z 's/\n\+$//')
+          fi
           
           echo "Generated changelog:"
-          echo "$CHANGELOG"
+          printf '%s' "$CHANGELOG"
+          echo ""
           
-          # Output the changelog
+          # Output the changelog using heredoc for proper newline handling
           {
             echo "CHANGELOG<<EOF"
-            echo "$CHANGELOG"
+            printf '%s' "$CHANGELOG"
+            echo ""
             echo "EOF"
           } >> $GITHUB_OUTPUT
 

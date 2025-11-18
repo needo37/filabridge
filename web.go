@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"sort"
@@ -21,6 +22,9 @@ import (
 
 //go:embed templates/*
 var templatesFS embed.FS
+
+//go:embed static/**
+var staticFS embed.FS
 
 // WebServer handles HTTP requests using Gin
 type WebServer struct {
@@ -120,8 +124,13 @@ func (ws *WebServer) setupRoutes() {
 	}).ParseFS(templatesFS, "templates/*"))
 	ws.router.SetHTMLTemplate(tmpl)
 
-	// Static files
-	ws.router.Static("/static", "./static")
+	// Static files (embedded in binary)
+	// Use fs.Sub to strip the "static/" prefix from embedded paths
+	staticSubFS, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		log.Fatalf("Failed to create static filesystem: %v", err)
+	}
+	ws.router.StaticFS("/static", http.FS(staticSubFS))
 
 	// Main dashboard
 	ws.router.GET("/", ws.dashboardHandler)

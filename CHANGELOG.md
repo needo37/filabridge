@@ -5,6 +5,16 @@ All notable changes to FilaBridge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.1.5] - 2025-11-18
+
+### Added
+
+- embed static files into the binary and update routing to serve them
+
+### Changed
+
+- refactor CHANGELOG generation in release workflow to use printf for header and new entry creation
+
 ## [v0.1.3] - 2025-11-02
 
 ### Fixed

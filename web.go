@@ -440,7 +440,7 @@ func validatePrinterConfig(config PrinterConfig) error {
 		return fmt.Errorf("printer name is required")
 	}
 	if config.IPAddress == "" {
-		return fmt.Errorf("IP address is required")
+		return fmt.Errorf("IP address or hostname is required")
 	}
 	if config.Toolheads < 1 {
 		return fmt.Errorf("toolheads must be at least 1")
@@ -451,15 +451,14 @@ func validatePrinterConfig(config PrinterConfig) error {
 	return nil
 }
 
-// validateIPAddress validates IP address format
+// validateIPAddress validates IP address or hostname format
 func validateIPAddress(ip string) error {
 	if ip == "" {
-		return fmt.Errorf("IP address cannot be empty")
+		return fmt.Errorf("IP address or hostname cannot be empty")
 	}
-	// Basic IP validation - could be enhanced with proper regex
-	if len(ip) < 7 || len(ip) > 15 {
-		return fmt.Errorf("invalid IP address format")
-	}
+	// Allow both IP addresses and hostnames
+	// Hostnames can be longer than 15 characters, so remove the length restriction
+	// The actual connection attempt will validate if the address is reachable
 	return nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -456,10 +457,37 @@ func validateIPAddress(ip string) error {
 	if ip == "" {
 		return fmt.Errorf("IP address or hostname cannot be empty")
 	}
-	// Allow both IP addresses and hostnames
-	// Hostnames can be longer than 15 characters, so remove the length restriction
-	// The actual connection attempt will validate if the address is reachable
-	return nil
+
+	// Regex for IPv4 address (0-255.0-255.0-255.0-255)
+	ipv4Pattern := `^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$`
+
+	// Regex for hostname (RFC 1123)
+	// - allows labels up to 63 characters
+	// - labels can contain alphanumeric and hyphens
+	// - labels cannot start or end with a hyphen
+	// - total length up to 253 characters
+	// - must contain at least one letter (to avoid confusion with malformed IPs)
+	hostnamePattern := `^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`
+
+	// Check if it looks like an IPv4 pattern (contains dots and is primarily numeric)
+	// This catches malformed IPs like "192.168.1", "192.168.1.a", or "256.1.1.1"
+	looksLikeIP := regexp.MustCompile(`^[0-9]+(\.[0-9a-zA-Z]*)*$`)
+	if looksLikeIP.MatchString(ip) {
+		// If it looks like an IP, it must match the strict IPv4 pattern
+		if matched, _ := regexp.MatchString(ipv4Pattern, ip); matched {
+			return nil
+		}
+		return fmt.Errorf("invalid IP address format")
+	}
+
+	// Check if it matches hostname pattern
+	if matched, _ := regexp.MatchString(hostnamePattern, ip); matched {
+		if len(ip) <= 253 {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("invalid hostname format")
 }
 
 // mapToolheadHandler maps a spool to a toolhead

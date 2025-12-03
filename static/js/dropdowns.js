@@ -58,7 +58,7 @@ async function loadAvailableSpools(dropdown) {
             
             const optionText = document.createElement('div');
             optionText.className = 'option-text';
-            optionText.textContent = `[${spool.id}] ${spool.material || 'Unknown Material'} - ${spool.brand || 'Unknown Brand'} - ${spool.name || 'Unnamed Spool'}${spool.remaining_weight ? ` (${Math.round(spool.remaining_weight)}g remaining)` : ''}`;
+            optionText.textContent = `[${spool.id}] ${spool.material || 'Unknown Material'} - ${spool.brand || 'Unknown Brand'} - ${spool.name || 'Unnamed Spool'}${spool.remaining_weight != null ? ` (${Math.round(spool.remaining_weight)}g remaining)` : ''}`;
             
             option.appendChild(colorSwatch);
             option.appendChild(optionText);

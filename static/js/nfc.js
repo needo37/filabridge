@@ -79,7 +79,7 @@ async function loadSpoolTags() {
                 <div class="color-swatch" style="background-color: ${colorHex}"></div>
                 <div class="item-info">
                     <div class="item-name">[${url.spool_id}] ${url.spool_name}</div>
-                    <div class="item-details">${url.material} - ${url.brand}${url.remaining_weight ? ` - ${Math.round(url.remaining_weight)}g remaining` : ''}</div>
+                    <div class="item-details">${url.material} - ${url.brand}${url.remaining_weight != null ? ` - ${Math.round(url.remaining_weight)}g remaining` : ''}</div>
                 </div>
             `;
             

@@ -444,7 +444,7 @@ func validatePrinterConfig(config PrinterConfig) error {
 		return fmt.Errorf("printer name is required")
 	}
 	if config.IPAddress == "" {
-		return fmt.Errorf("IP address is required")
+		return fmt.Errorf("address is required")
 	}
 	if config.Toolheads < 1 {
 		return fmt.Errorf("toolheads must be at least 1")
@@ -455,14 +455,25 @@ func validatePrinterConfig(config PrinterConfig) error {
 	return nil
 }
 
-// validateIPAddress validates IP address format
-func validateIPAddress(ip string) error {
-	if ip == "" {
-		return fmt.Errorf("IP address cannot be empty")
+// validateAddress validates hostname or IP address format
+func validateAddress(address string) error {
+	if address == "" {
+		return fmt.Errorf("address cannot be empty")
 	}
-	// Basic IP validation - could be enhanced with proper regex
-	if len(ip) < 7 || len(ip) > 15 {
-		return fmt.Errorf("invalid IP address format")
+	// Basic validation - check for reasonable length (hostnames can be longer than IPs)
+	// Minimum: 1 character (e.g., "a"), Maximum: 253 characters (RFC 1035)
+	if len(address) < 1 || len(address) > 253 {
+		return fmt.Errorf("invalid address format")
+	}
+	// Basic character validation - allow common characters used in hostnames and IP addresses
+	// This includes: letters, numbers, dots, hyphens, underscores, colons (for IPv6), and brackets (for IPv6)
+	// The HTTP client will perform more thorough validation when connecting
+	for _, char := range address {
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || 
+			(char >= '0' && char <= '9') || char == '.' || char == '-' || char == '_' || 
+			char == ':' || char == '[' || char == ']') {
+			return fmt.Errorf("invalid address format: contains invalid characters")
+		}
 	}
 	return nil
 }
@@ -713,8 +724,8 @@ func (ws *WebServer) addPrinterHandler(c *gin.Context) {
 		return
 	}
 
-	// Validate IP address
-	if err := validateIPAddress(printerConfig.IPAddress); err != nil {
+	// Validate address
+	if err := validateAddress(printerConfig.IPAddress); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -757,13 +768,13 @@ func (ws *WebServer) updatePrinterHandler(c *gin.Context) {
 		return
 	}
 
-	// Validate IP address
-	if err := validateIPAddress(printerConfig.IPAddress); err != nil {
+	// Validate address
+	if err := validateAddress(printerConfig.IPAddress); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Auto-detect model if IP address or API key changed, or if model is currently "Unknown"
+	// Auto-detect model if address or API key changed, or if model is currently "Unknown"
 	if printerConfig.Model == "" || printerConfig.Model == ModelUnknown {
 		log.Printf("🔍 [Auto-Detection] Detecting model for printer %s (IP: %s)", printerID, printerConfig.IPAddress)
 
@@ -958,8 +969,8 @@ func (ws *WebServer) detectPrinterHandler(c *gin.Context) {
 		return
 	}
 
-	// Validate IP address
-	if err := validateIPAddress(req.IPAddress); err != nil {
+	// Validate address
+	if err := validateAddress(req.IPAddress); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

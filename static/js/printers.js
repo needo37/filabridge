@@ -47,7 +47,7 @@ function loadPrinters() {
                         <h3>${printer.name || 'Unknown Printer'}</h3>
                         <div class="printer-info">
                             <div><strong>Model:</strong> ${printer.model || 'Unknown'} (${printer.toolheads || 1} toolhead${printer.toolheads > 1 ? 's' : ''})</div>
-                            <div><strong>IP:</strong> ${printer.ip_address || 'Not configured'}</div>
+                            <div><strong>Address:</strong> ${printer.ip_address || 'Not configured'}</div>
                             <div><strong>API Key:</strong> ${printer.api_key ? '••••••••' : 'Not configured'}</div>
                         </div>
                         <div class="printer-actions">

@@ -37,16 +37,8 @@ func (b *FilamentBridge) parseLocationParam(location string) (printerName string
 			printerName = strings.TrimSpace(parts[0])
 			toolheadPart := strings.TrimSpace(parts[1])
 
-			// First, try to parse as numeric ID (old format: "Toolhead N")
-			if strings.HasPrefix(toolheadPart, "Toolhead ") {
-				toolheadIDStr := strings.TrimPrefix(toolheadPart, "Toolhead ")
-				toolheadID, err = strconv.Atoi(toolheadIDStr)
-				if err == nil {
-					return printerName, toolheadID, location, true, nil
-				}
-			}
-
-			// If not numeric, try to find by custom name (new format)
+			// First, try to find by custom name (prioritize custom names over numeric parsing)
+			// This ensures that if a user names toolhead 0 as "Toolhead 1", it will match correctly
 			// Get all printer configs to find matching printer and toolhead
 			printerConfigs, err := b.GetAllPrinterConfigs()
 			if err == nil {
@@ -55,7 +47,7 @@ func (b *FilamentBridge) parseLocationParam(location string) (printerName string
 						// Get toolhead names for this printer
 						toolheadNames, err := b.GetAllToolheadNames(printerID)
 						if err == nil {
-							// Look for matching display name
+							// Look for matching display name (custom names take precedence)
 							for tid, displayName := range toolheadNames {
 								if displayName == toolheadPart {
 									return printerName, tid, location, true, nil
@@ -67,6 +59,30 @@ func (b *FilamentBridge) parseLocationParam(location string) (printerName string
 							defaultName := fmt.Sprintf("Toolhead %d", tid)
 							if defaultName == toolheadPart {
 								return printerName, tid, location, true, nil
+							}
+						}
+					}
+				}
+			}
+
+			// If no custom name match found, try to parse as numeric ID (old format: "Toolhead N")
+			// This maintains backward compatibility for numeric-only toolhead IDs
+			if strings.HasPrefix(toolheadPart, "Toolhead ") {
+				toolheadIDStr := strings.TrimPrefix(toolheadPart, "Toolhead ")
+				toolheadID, err = strconv.Atoi(toolheadIDStr)
+				if err == nil {
+					// Validate that the parsed numeric ID exists for this printer
+					// This prevents matching "Toolhead 1" to a non-existent toolhead when it's actually a custom name
+					printerConfigs, err := b.GetAllPrinterConfigs()
+					if err == nil {
+						for _, printerConfig := range printerConfigs {
+							if printerConfig.Name == printerName {
+								// Verify the numeric ID is within valid range
+								if toolheadID >= 0 && toolheadID < printerConfig.Toolheads {
+									return printerName, toolheadID, location, true, nil
+								}
+								// If numeric ID is out of range, don't return it - treat as regular location
+								break
 							}
 						}
 					}

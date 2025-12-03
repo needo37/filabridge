@@ -31,6 +31,8 @@ const (
 	ConfigKeySpoolmanTimeout              = "spoolman_timeout"
 	ConfigKeySpoolmanUsername             = "spoolman_username"
 	ConfigKeySpoolmanPassword             = "spoolman_password"
+	ConfigKeyAutoAssignPreviousSpoolEnabled = "auto_assign_previous_spool_enabled"
+	ConfigKeyAutoAssignPreviousSpoolLocation = "auto_assign_previous_spool_location"
 )
 
 // HTTP timeouts

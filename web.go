@@ -148,6 +148,8 @@ func (ws *WebServer) setupRoutes() {
 		api.POST("/test/print_complete", ws.testPrintCompleteHandler)
 		api.GET("/config", ws.getConfigHandler)
 		api.POST("/config", ws.updateConfigHandler)
+		api.GET("/config/auto-assign-previous-spool", ws.getAutoAssignPreviousSpoolHandler)
+		api.PUT("/config/auto-assign-previous-spool", ws.updateAutoAssignPreviousSpoolHandler)
 		api.GET("/printers", ws.getPrintersHandler)
 		api.POST("/printers", ws.addPrinterHandler)
 		api.PUT("/printers/:id", ws.updatePrinterHandler)
@@ -604,6 +606,53 @@ func (ws *WebServer) updateConfigHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Configuration updated successfully"})
+}
+
+// getAutoAssignPreviousSpoolHandler returns current auto-assign previous spool settings
+func (ws *WebServer) getAutoAssignPreviousSpoolHandler(c *gin.Context) {
+	enabled, err := ws.bridge.GetAutoAssignPreviousSpoolEnabled()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	location, err := ws.bridge.GetAutoAssignPreviousSpoolLocation()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"enabled":  enabled,
+		"location": location,
+	})
+}
+
+// updateAutoAssignPreviousSpoolHandler updates auto-assign previous spool settings
+func (ws *WebServer) updateAutoAssignPreviousSpoolHandler(c *gin.Context) {
+	var req struct {
+		Enabled  bool   `json:"enabled" binding:"required"`
+		Location string `json:"location"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON or missing 'enabled' field"})
+		return
+	}
+
+	// Update enabled setting
+	if err := ws.bridge.SetAutoAssignPreviousSpoolEnabled(req.Enabled); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Update location setting
+	if err := ws.bridge.SetAutoAssignPreviousSpoolLocation(req.Location); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Auto-assign previous spool settings updated successfully"})
 }
 
 // getPrintersHandler returns all configured printers

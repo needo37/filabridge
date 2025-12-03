@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -210,6 +211,8 @@ func (b *FilamentBridge) initializeDefaultConfig() error {
 		ConfigKeyPrusaLinkTimeout:             fmt.Sprintf("%d", PrusaLinkTimeout),
 		ConfigKeyPrusaLinkFileDownloadTimeout: fmt.Sprintf("%d", PrusaLinkFileDownloadTimeout),
 		ConfigKeySpoolmanTimeout:              fmt.Sprintf("%d", SpoolmanTimeout),
+		ConfigKeyAutoAssignPreviousSpoolEnabled: "false", // Enable auto-assignment of previous spool to default location
+		ConfigKeyAutoAssignPreviousSpoolLocation: "",      // Default location name for auto-assigned previous spools
 	}
 
 	// Check if this is a fresh installation by checking if any config exists
@@ -248,6 +251,8 @@ func getConfigDescription(key string) string {
 		ConfigKeyPrusaLinkTimeout:             "PrusaLink API timeout in seconds",
 		ConfigKeyPrusaLinkFileDownloadTimeout: "PrusaLink file download timeout in seconds",
 		ConfigKeySpoolmanTimeout:              "Spoolman API timeout in seconds",
+		ConfigKeyAutoAssignPreviousSpoolEnabled: "Enable automatic assignment of previous spool to default location when assigning new spool to toolhead",
+		ConfigKeyAutoAssignPreviousSpoolLocation: "Default location name where previous spools will be automatically assigned (must exist as a location)",
 	}
 	if desc, exists := descriptions[key]; exists {
 		return desc
@@ -295,6 +300,46 @@ func (b *FilamentBridge) GetAllConfig() (map[string]string, error) {
 	}
 
 	return config, nil
+}
+
+// GetAutoAssignPreviousSpoolEnabled gets whether auto-assignment of previous spool is enabled
+func (b *FilamentBridge) GetAutoAssignPreviousSpoolEnabled() (bool, error) {
+	value, err := b.GetConfigValue(ConfigKeyAutoAssignPreviousSpoolEnabled)
+	if err != nil {
+		// If key doesn't exist, return false (default)
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return value == "true", nil
+}
+
+// SetAutoAssignPreviousSpoolEnabled sets whether auto-assignment of previous spool is enabled
+func (b *FilamentBridge) SetAutoAssignPreviousSpoolEnabled(enabled bool) error {
+	value := "false"
+	if enabled {
+		value = "true"
+	}
+	return b.SetConfigValue(ConfigKeyAutoAssignPreviousSpoolEnabled, value)
+}
+
+// GetAutoAssignPreviousSpoolLocation gets the default location name for auto-assigned previous spools
+func (b *FilamentBridge) GetAutoAssignPreviousSpoolLocation() (string, error) {
+	value, err := b.GetConfigValue(ConfigKeyAutoAssignPreviousSpoolLocation)
+	if err != nil {
+		// If key doesn't exist, return empty string (default)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return value, nil
+}
+
+// SetAutoAssignPreviousSpoolLocation sets the default location name for auto-assigned previous spools
+func (b *FilamentBridge) SetAutoAssignPreviousSpoolLocation(location string) error {
+	return b.SetConfigValue(ConfigKeyAutoAssignPreviousSpoolLocation, location)
 }
 
 // GetAllPrinterConfigs gets all printer configurations
@@ -519,7 +564,18 @@ func (b *FilamentBridge) GetToolheadMapping(printerName string, toolheadID int) 
 // SetToolheadMapping maps a spool to a specific toolhead
 func (b *FilamentBridge) SetToolheadMapping(printerName string, toolheadID int, spoolID int) error {
 	b.mutex.Lock()
-	defer b.mutex.Unlock()
+
+	// Get the previous spool ID before replacing it (for auto-assignment feature)
+	var previousSpoolID int
+	err := b.db.QueryRow(
+		"SELECT spool_id FROM toolhead_mappings WHERE printer_name = ? AND toolhead_id = ?",
+		printerName, toolheadID,
+	).Scan(&previousSpoolID)
+	if err != nil && err != sql.ErrNoRows {
+		b.mutex.Unlock()
+		return fmt.Errorf("failed to get previous spool mapping: %w", err)
+	}
+	// If no previous mapping exists, previousSpoolID will be 0
 
 	// Check if this spool is already assigned to a different toolhead
 	rows, err := b.db.Query(
@@ -527,6 +583,7 @@ func (b *FilamentBridge) SetToolheadMapping(printerName string, toolheadID int, 
 		spoolID, printerName, toolheadID,
 	)
 	if err != nil {
+		b.mutex.Unlock()
 		return fmt.Errorf("failed to check existing spool assignments: %w", err)
 	}
 	defer rows.Close()
@@ -536,8 +593,10 @@ func (b *FilamentBridge) SetToolheadMapping(printerName string, toolheadID int, 
 		var existingPrinterName string
 		var existingToolheadID int
 		if err := rows.Scan(&existingPrinterName, &existingToolheadID); err != nil {
+			b.mutex.Unlock()
 			return fmt.Errorf("failed to scan existing assignment: %w", err)
 		}
+		b.mutex.Unlock()
 		return fmt.Errorf("spool %d is already assigned to %s toolhead %d", spoolID, existingPrinterName, existingToolheadID)
 	}
 
@@ -546,10 +605,50 @@ func (b *FilamentBridge) SetToolheadMapping(printerName string, toolheadID int, 
 		printerName, toolheadID, spoolID, time.Now(),
 	)
 	if err != nil {
+		b.mutex.Unlock()
 		return fmt.Errorf("failed to set toolhead mapping: %w", err)
 	}
 
 	log.Printf("Mapped %s toolhead %d to spool %d", printerName, toolheadID, spoolID)
+
+	// Check if auto-assign feature is enabled and we have a previous spool to assign
+	enabled, err := b.GetAutoAssignPreviousSpoolEnabled()
+	if err != nil {
+		log.Printf("Warning: Failed to check auto-assign previous spool setting: %v", err)
+		b.mutex.Unlock()
+		return nil // Don't fail the assignment if we can't check the setting
+	}
+
+	// Unlock before potentially calling AssignSpoolToLocation (which may need locks)
+	b.mutex.Unlock()
+
+	if enabled && previousSpoolID > 0 && previousSpoolID != spoolID {
+		// Get the configured default location
+		locationName, err := b.GetAutoAssignPreviousSpoolLocation()
+		if err != nil {
+			log.Printf("Warning: Failed to get auto-assign previous spool location setting: %v", err)
+			return nil // Don't fail the assignment
+		}
+
+		if locationName != "" {
+			// Verify the location exists
+			location, err := b.FindLocationByName(locationName)
+			if err != nil || location == nil {
+				log.Printf("Warning: Auto-assign previous spool location '%s' does not exist, skipping auto-assignment of spool %d", locationName, previousSpoolID)
+				return nil // Don't fail the assignment
+			}
+
+			// Assign the previous spool to the default location
+			// Use isPrinterLocation = false since this is a storage location
+			if err := b.AssignSpoolToLocation(previousSpoolID, "", 0, locationName, false); err != nil {
+				log.Printf("Warning: Failed to auto-assign previous spool %d to location '%s': %v", previousSpoolID, locationName, err)
+				// Don't fail the original assignment if auto-assignment fails
+			} else {
+				log.Printf("Auto-assigned previous spool %d to location '%s'", previousSpoolID, locationName)
+			}
+		}
+	}
+
 	return nil
 }
 

@@ -24,6 +24,7 @@ function switchTab(tabName) {
     if (tabName === 'settings') {
         loadConfiguration();
         loadAdvancedSettings();
+        loadAutoAssignSettings();
     }
 }
 
@@ -159,6 +160,70 @@ function resetAdvancedSettings() {
         document.getElementById('prusalinkFileDownloadTimeout').value = '60';
         document.getElementById('spoolmanTimeout').value = '30';
     }
+}
+
+// Auto-Assign Previous Spool Settings Functions
+function loadAutoAssignSettings() {
+    fetch('/api/config/auto-assign-previous-spool')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Error loading auto-assign settings:', data.error);
+                return;
+            }
+            
+            const enabled = data.enabled || false;
+            const location = data.location || '';
+            
+            document.getElementById('autoAssignPreviousSpoolEnabled').checked = enabled;
+            document.getElementById('autoAssignPreviousSpoolLocation').value = location;
+            
+            // Show/hide location input based on checkbox
+            const locationGroup = document.getElementById('autoAssignLocationGroup');
+            if (locationGroup) {
+                locationGroup.style.display = enabled ? 'block' : 'none';
+            }
+            
+            // Add event listener to checkbox to show/hide location input
+            const checkbox = document.getElementById('autoAssignPreviousSpoolEnabled');
+            if (checkbox) {
+                checkbox.addEventListener('change', function() {
+                    if (locationGroup) {
+                        locationGroup.style.display = this.checked ? 'block' : 'none';
+                    }
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading auto-assign settings:', error);
+        });
+}
+
+function saveAutoAssignSettings() {
+    const enabled = document.getElementById('autoAssignPreviousSpoolEnabled').checked;
+    const location = document.getElementById('autoAssignPreviousSpoolLocation').value.trim();
+    
+    const settings = {
+        enabled: enabled,
+        location: location
+    };
+    
+    fetch('/api/config/auto-assign-previous-spool', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(settings)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error saving auto-assign settings: ' + data.error);
+        } else {
+            alert('Auto-assign settings saved successfully!');
+        }
+    })
+    .catch(error => {
+        alert('Error saving auto-assign settings: ' + error.message);
+    });
 }
 
 // Utility Functions

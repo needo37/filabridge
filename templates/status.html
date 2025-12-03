@@ -67,8 +67,14 @@
                     {{$mapping := index $.Status.ToolheadMappings $printerID}}
                     {{range $toolheadID := generateToolheadIDs $printerConfig.Toolheads}}
                     {{$mappedSpool := index $mapping $toolheadID}}
+                    {{$displayName := "Toolhead"}}
+                    {{if $mappedSpool.DisplayName}}
+                        {{$displayName = $mappedSpool.DisplayName}}
+                    {{else}}
+                        {{$displayName = printf "Toolhead %d" $toolheadID}}
+                    {{end}}
                     <div class="toolhead-mapping-row" style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px;" data-printer-id="{{$printerID}}" data-toolhead-id="{{$toolheadID}}">
-                        <div class="toolhead-label" style="min-width: 100px; font-weight: bold;">Toolhead {{$toolheadID}}:</div>
+                        <div class="toolhead-label" style="min-width: 100px; font-weight: bold;">{{$displayName}}:</div>
                         <div class="custom-dropdown" style="flex: 1;">
                             <div class="dropdown-button">
                                 <div style="display: flex; align-items: center; gap: 10px;">

@@ -249,6 +249,15 @@ function updateToolheadMappings(mappings) {
         
         if (!dropdownButton) return;
         
+        // Update toolhead label with display name if available
+        const toolheadLabel = toolheadRow.querySelector('.toolhead-label');
+        if (toolheadLabel && mappings[printerId] && mappings[printerId][toolheadId]) {
+            const mapping = mappings[printerId][toolheadId];
+            if (mapping.display_name) {
+                toolheadLabel.textContent = mapping.display_name + ':';
+            }
+        }
+        
         // Check if this toolhead has a mapping
         if (mappedToolheads.has(key) && mappings[printerId] && mappings[printerId][toolheadId]) {
             // Toolhead has a mapping - update it

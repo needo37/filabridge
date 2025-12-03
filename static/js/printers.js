@@ -14,6 +14,26 @@ function loadPrinters() {
                     
                     const printerCard = document.createElement('div');
                     printerCard.className = 'printer-card';
+                    
+                    // Build toolhead names section
+                    let toolheadNamesHTML = '';
+                    const toolheadNames = printer.toolhead_names || {};
+                    for (let toolheadID = 0; toolheadID < (printer.toolheads || 1); toolheadID++) {
+                        const currentName = toolheadNames[toolheadID] || `Toolhead ${toolheadID}`;
+                        toolheadNamesHTML += `
+                            <div class="form-row" style="margin-bottom: 10px;">
+                                <label style="min-width: 120px;">Toolhead ${toolheadID}:</label>
+                                <input type="text" 
+                                       id="toolhead-name-${printerId}-${toolheadID}" 
+                                       value="${currentName}" 
+                                       class="toolhead-name-input"
+                                       data-printer-id="${printerId}"
+                                       data-toolhead-id="${toolheadID}"
+                                       style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #666; background: rgba(255,255,255,0.1); color: #fff;">
+                            </div>
+                        `;
+                    }
+                    
                     printerCard.innerHTML = `
                         <h3>${printer.name || 'Unknown Printer'}</h3>
                         <div class="printer-info">
@@ -23,7 +43,16 @@ function loadPrinters() {
                         </div>
                         <div class="printer-actions">
                             <button class="btn btn-small" onclick="editPrinter('${printerId}')">✏️ Edit</button>
+                            <button class="btn btn-small" onclick="toggleToolheadNames('${printerId}')">🔤 Rename Toolheads</button>
                             <button class="btn btn-small btn-danger" onclick="deletePrinter('${printerId}')">🗑️ Delete</button>
+                        </div>
+                        <div id="toolhead-names-${printerId}" class="toolhead-names-section" style="display: none; margin-top: 15px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 5px;">
+                            <h4 style="margin-top: 0; margin-bottom: 15px;">Toolhead Names</h4>
+                            ${toolheadNamesHTML}
+                            <div style="margin-top: 15px; text-align: right;">
+                                <button class="btn btn-small" onclick="saveToolheadNames('${printerId}')">💾 Save Names</button>
+                                <button class="btn btn-small btn-secondary" onclick="cancelToolheadNames('${printerId}')">❌ Cancel</button>
+                            </div>
                         </div>
                     `;
                     printerList.appendChild(printerCard);
@@ -264,4 +293,87 @@ function deletePrinter(printerId) {
             alert('Error deleting printer: ' + error.message);
         });
     }
+}
+
+// Toolhead Name Management Functions
+function toggleToolheadNames(printerId) {
+    const section = document.getElementById(`toolhead-names-${printerId}`);
+    if (section.style.display === 'none') {
+        section.style.display = 'block';
+        // Store original values when opening
+        const inputs = section.querySelectorAll('.toolhead-name-input');
+        inputs.forEach(input => {
+            input.dataset.originalValue = input.value;
+        });
+    } else {
+        section.style.display = 'none';
+    }
+}
+
+function saveToolheadNames(printerId) {
+    const section = document.getElementById(`toolhead-names-${printerId}`);
+    const inputs = section.querySelectorAll('.toolhead-name-input');
+    const updates = [];
+    
+    // Collect all updates
+    inputs.forEach(input => {
+        const toolheadId = parseInt(input.dataset.toolheadId);
+        const newName = input.value.trim();
+        const originalName = input.dataset.originalValue || '';
+        
+        // Only update if name changed
+        if (newName !== originalName && newName !== '') {
+            updates.push({
+                toolheadId: toolheadId,
+                name: newName
+            });
+        }
+    });
+    
+    if (updates.length === 0) {
+        alert('No changes to save');
+        return;
+    }
+    
+    // Save each toolhead name
+    const savePromises = updates.map(update => {
+        return fetch(`/api/printers/${printerId}/toolheads/${update.toolheadId}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name: update.name })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            return data;
+        });
+    });
+    
+    // Execute all updates
+    Promise.all(savePromises)
+        .then(() => {
+            alert('Toolhead names saved successfully!');
+            // Close the section and reload printers to show updated names
+            section.style.display = 'none';
+            loadPrinters();
+        })
+        .catch(error => {
+            alert('Error saving toolhead names: ' + error.message);
+        });
+}
+
+function cancelToolheadNames(printerId) {
+    const section = document.getElementById(`toolhead-names-${printerId}`);
+    const inputs = section.querySelectorAll('.toolhead-name-input');
+    
+    // Restore original values
+    inputs.forEach(input => {
+        if (input.dataset.originalValue) {
+            input.value = input.dataset.originalValue;
+        }
+    });
+    
+    section.style.display = 'none';
 }

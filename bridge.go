@@ -32,6 +32,7 @@ type ToolheadMapping struct {
 	ToolheadID  int       `json:"toolhead_id"`
 	SpoolID     int       `json:"spool_id"`
 	MappedAt    time.Time `json:"mapped_at"`
+	DisplayName string    `json:"display_name,omitempty"` // Custom toolhead name or empty for default
 }
 
 // PrintHistory represents a record of filament usage
@@ -173,6 +174,12 @@ func (b *FilamentBridge) initDatabase() error {
 			toolhead_id INTEGER,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS toolhead_names (
+			printer_id TEXT,
+			toolhead_id INTEGER,
+			display_name TEXT NOT NULL,
+			PRIMARY KEY (printer_id, toolhead_id)
 		)`,
 	}
 
@@ -342,6 +349,78 @@ func (b *FilamentBridge) DeletePrinterConfig(printerID string) error {
 		return fmt.Errorf("failed to delete printer config: %w", err)
 	}
 	return nil
+}
+
+// GetToolheadName gets the display name for a toolhead, or returns default "Toolhead {ID}"
+func (b *FilamentBridge) GetToolheadName(printerID string, toolheadID int) (string, error) {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	var displayName string
+	err := b.db.QueryRow(
+		"SELECT display_name FROM toolhead_names WHERE printer_id = ? AND toolhead_id = ?",
+		printerID, toolheadID,
+	).Scan(&displayName)
+
+	if err == sql.ErrNoRows {
+		// Return default name if not found
+		return fmt.Sprintf("Toolhead %d", toolheadID), nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get toolhead name: %w", err)
+	}
+
+	return displayName, nil
+}
+
+// SetToolheadName sets the display name for a toolhead
+func (b *FilamentBridge) SetToolheadName(printerID string, toolheadID int, name string) error {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	// Validate name is not empty
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("toolhead name cannot be empty")
+	}
+
+	_, err := b.db.Exec(
+		"INSERT OR REPLACE INTO toolhead_names (printer_id, toolhead_id, display_name) VALUES (?, ?, ?)",
+		printerID, toolheadID, name,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to set toolhead name: %w", err)
+	}
+
+	log.Printf("Set toolhead name for printer %s, toolhead %d: %s", printerID, toolheadID, name)
+	return nil
+}
+
+// GetAllToolheadNames gets all toolhead display names for a printer
+func (b *FilamentBridge) GetAllToolheadNames(printerID string) (map[int]string, error) {
+	b.mutex.RLock()
+	defer b.mutex.RUnlock()
+
+	rows, err := b.db.Query(
+		"SELECT toolhead_id, display_name FROM toolhead_names WHERE printer_id = ? ORDER BY toolhead_id",
+		printerID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get toolhead names: %w", err)
+	}
+	defer rows.Close()
+
+	names := make(map[int]string)
+	for rows.Next() {
+		var toolheadID int
+		var displayName string
+		if err := rows.Scan(&toolheadID, &displayName); err != nil {
+			return nil, fmt.Errorf("failed to scan toolhead name row: %w", err)
+		}
+		names[toolheadID] = displayName
+	}
+
+	return names, nil
 }
 
 // GetConfigSnapshot returns a snapshot of the current config for safe iteration
@@ -880,7 +959,24 @@ func (b *FilamentBridge) GetStatus() (*PrinterStatus, error) {
 			log.Printf("Error getting toolhead mappings for %s: %v", printerName, err)
 			status.ToolheadMappings[printerID] = make(map[int]ToolheadMapping)
 		} else {
-			status.ToolheadMappings[printerID] = mappings
+			// Enhance mappings with display names
+			enhancedMappings := make(map[int]ToolheadMapping)
+			toolheadNames, err := b.GetAllToolheadNames(printerID)
+			if err != nil {
+				log.Printf("Warning: Failed to get toolhead names for printer %s: %v", printerID, err)
+				toolheadNames = make(map[int]string)
+			}
+
+			for toolheadID, mapping := range mappings {
+				// Get display name (custom or default)
+				if displayName, exists := toolheadNames[toolheadID]; exists {
+					mapping.DisplayName = displayName
+				} else {
+					mapping.DisplayName = fmt.Sprintf("Toolhead %d", toolheadID)
+				}
+				enhancedMappings[toolheadID] = mapping
+			}
+			status.ToolheadMappings[printerID] = enhancedMappings
 		}
 	}
 
@@ -1169,7 +1265,7 @@ func (b *FilamentBridge) DeleteLocation(name string) error {
 }
 
 // isVirtualPrinterToolheadLocation checks if a location name matches the pattern
-// of a virtual printer toolhead location (e.g., "PrinterName - Toolhead 0")
+// of a virtual printer toolhead location (e.g., "PrinterName - Toolhead 0" or "PrinterName - Black")
 func (b *FilamentBridge) isVirtualPrinterToolheadLocation(name string) bool {
 	// Get all printer configurations
 	printerConfigs, err := b.GetAllPrinterConfigs()
@@ -1180,11 +1276,27 @@ func (b *FilamentBridge) isVirtualPrinterToolheadLocation(name string) bool {
 	}
 
 	// Check if the name matches any printer's toolhead location pattern
-	for _, printerConfig := range printerConfigs {
+	for printerID, printerConfig := range printerConfigs {
+		// Get toolhead names for this printer
+		toolheadNames, err := b.GetAllToolheadNames(printerID)
+		if err != nil {
+			log.Printf("Warning: Could not get toolhead names for printer %s: %v", printerID, err)
+			toolheadNames = make(map[int]string)
+		}
+
 		for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
-			expectedName := fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID)
-			if name == expectedName {
+			// Check default pattern
+			expectedNameDefault := fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID)
+			if name == expectedNameDefault {
 				return true
+			}
+
+			// Check custom name pattern
+			if displayName, exists := toolheadNames[toolheadID]; exists {
+				expectedNameCustom := fmt.Sprintf("%s - %s", printerConfig.Name, displayName)
+				if name == expectedNameCustom {
+					return true
+				}
 			}
 		}
 	}

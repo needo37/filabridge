@@ -152,6 +152,8 @@ func (ws *WebServer) setupRoutes() {
 		api.POST("/printers", ws.addPrinterHandler)
 		api.PUT("/printers/:id", ws.updatePrinterHandler)
 		api.DELETE("/printers/:id", ws.deletePrinterHandler)
+		api.GET("/printers/:id/toolheads", ws.getToolheadNamesHandler)
+		api.PUT("/printers/:id/toolheads/:toolhead_id", ws.updateToolheadNameHandler)
 		api.POST("/detect_printer", ws.detectPrinterHandler)
 		api.GET("/print-errors", ws.getPrintErrorsHandler)
 		api.POST("/print-errors/:id/acknowledge", ws.acknowledgePrintErrorHandler)
@@ -612,7 +614,36 @@ func (ws *WebServer) getPrintersHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"printers": printerConfigs})
+	// Enhance printer configs with toolhead names
+	result := make(map[string]interface{})
+	for printerID, printerConfig := range printerConfigs {
+		printerData := map[string]interface{}{
+			"name":       printerConfig.Name,
+			"model":      printerConfig.Model,
+			"ip_address": printerConfig.IPAddress,
+			"api_key":    printerConfig.APIKey,
+			"toolheads":  printerConfig.Toolheads,
+		}
+
+		// Get toolhead names for this printer
+		toolheadNames, err := ws.bridge.GetAllToolheadNames(printerID)
+		if err == nil {
+			// Build toolhead names map with defaults
+			toolheadNamesMap := make(map[int]string)
+			for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
+				if name, exists := toolheadNames[toolheadID]; exists {
+					toolheadNamesMap[toolheadID] = name
+				} else {
+					toolheadNamesMap[toolheadID] = fmt.Sprintf("Toolhead %d", toolheadID)
+				}
+			}
+			printerData["toolhead_names"] = toolheadNamesMap
+		}
+
+		result[printerID] = printerData
+	}
+
+	c.JSON(http.StatusOK, gin.H{"printers": result})
 }
 
 // addPrinterHandler adds a new printer configuration
@@ -746,6 +777,92 @@ func (ws *WebServer) deletePrinterHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Printer deleted successfully"})
+}
+
+// getToolheadNamesHandler returns all toolhead names for a printer
+func (ws *WebServer) getToolheadNamesHandler(c *gin.Context) {
+	printerID := c.Param("id")
+
+	// Verify printer exists
+	printerConfigs, err := ws.bridge.GetAllPrinterConfigs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	printerConfig, exists := printerConfigs[printerID]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Printer not found"})
+		return
+	}
+
+	// Get all toolhead names
+	toolheadNames, err := ws.bridge.GetAllToolheadNames(printerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build response with all toolheads (including defaults for unnamed ones)
+	result := make(map[int]string)
+	for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
+		if name, exists := toolheadNames[toolheadID]; exists {
+			result[toolheadID] = name
+		} else {
+			result[toolheadID] = fmt.Sprintf("Toolhead %d", toolheadID)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"toolhead_names": result})
+}
+
+// updateToolheadNameHandler updates a toolhead's display name
+func (ws *WebServer) updateToolheadNameHandler(c *gin.Context) {
+	printerID := c.Param("id")
+	toolheadIDStr := c.Param("toolhead_id")
+
+	// Parse toolhead ID
+	toolheadID, err := strconv.Atoi(toolheadIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid toolhead ID"})
+		return
+	}
+
+	// Verify printer exists
+	printerConfigs, err := ws.bridge.GetAllPrinterConfigs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	printerConfig, exists := printerConfigs[printerID]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Printer not found"})
+		return
+	}
+
+	// Validate toolhead ID is within range
+	if toolheadID < 0 || toolheadID >= printerConfig.Toolheads {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Toolhead ID must be between 0 and %d", printerConfig.Toolheads-1)})
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON or missing 'name' field"})
+		return
+	}
+
+	// Update toolhead name
+	if err := ws.bridge.SetToolheadName(printerID, toolheadID, req.Name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Toolhead name updated successfully"})
 }
 
 // detectPrinterModel detects printer model from hostname
@@ -1012,7 +1129,7 @@ func (ws *WebServer) nfcAssignHandler(c *gin.Context) {
 	var isPrinterLocation bool
 
 	if locationStr != "" {
-		printerName, toolheadID, locationName, isPrinterLocation, err = parseLocationParam(locationStr)
+		printerName, toolheadID, locationName, isPrinterLocation, err = ws.bridge.parseLocationParam(locationStr)
 		if err != nil {
 			c.HTML(http.StatusBadRequest, "nfc_error.html", gin.H{
 				"Error": err.Error(),
@@ -1288,9 +1405,24 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 	}
 
 	// Generate virtual printer toolhead locations
-	for _, printerConfig := range printerConfigs {
+	for printerID, printerConfig := range printerConfigs {
+		// Get toolhead names for this printer
+		toolheadNames, err := ws.bridge.GetAllToolheadNames(printerID)
+		if err != nil {
+			log.Printf("Warning: Failed to get toolhead names for printer %s: %v", printerID, err)
+			toolheadNames = make(map[int]string)
+		}
+
 		for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
-			locationParam := fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID)
+			// Get display name (custom or default)
+			var displayName string
+			if name, exists := toolheadNames[toolheadID]; exists {
+				displayName = name
+			} else {
+				displayName = fmt.Sprintf("Toolhead %d", toolheadID)
+			}
+
+			locationParam := fmt.Sprintf("%s - %s", printerConfig.Name, displayName)
 			url := fmt.Sprintf("http://%s/api/nfc/assign?location=%s", c.Request.Host, locationParam)
 
 			// Generate QR code
@@ -1301,8 +1433,8 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 				urls = append(urls, gin.H{
 					"type":           "location",
 					"location_type":  "printer",
-					"location_name":  fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID),
-					"display_name":   fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID),
+					"location_name":  locationParam,
+					"display_name":   locationParam,
 					"printer_name":   printerConfig.Name,
 					"toolhead_id":    toolheadID,
 					"url":            url,
@@ -1315,8 +1447,8 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 			urls = append(urls, gin.H{
 				"type":           "location",
 				"location_type":  "printer",
-				"location_name":  fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID),
-				"display_name":   fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID),
+				"location_name":  locationParam,
+				"display_name":   locationParam,
 				"printer_name":   printerConfig.Name,
 				"toolhead_id":    toolheadID,
 				"url":            url,
@@ -1440,11 +1572,27 @@ func (ws *WebServer) getLocationsHandler(c *gin.Context) {
 
 	// Create virtual printer toolhead locations
 	var allLocations []gin.H
-	for _, printerConfig := range printerConfigs {
+	for printerID, printerConfig := range printerConfigs {
+		// Get toolhead names for this printer
+		toolheadNames, err := ws.bridge.GetAllToolheadNames(printerID)
+		if err != nil {
+			log.Printf("Warning: Failed to get toolhead names for printer %s: %v", printerID, err)
+			toolheadNames = make(map[int]string)
+		}
+
 		for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
+			// Get display name (custom or default)
+			var displayName string
+			if name, exists := toolheadNames[toolheadID]; exists {
+				displayName = name
+			} else {
+				displayName = fmt.Sprintf("Toolhead %d", toolheadID)
+			}
+
+			locationName := fmt.Sprintf("%s - %s", printerConfig.Name, displayName)
 			allLocations = append(allLocations, gin.H{
 				"id":           fmt.Sprintf("printer_%s_%d", printerConfig.Name, toolheadID),
-				"name":         fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID),
+				"name":         locationName,
 				"type":         "printer",
 				"printer_name": printerConfig.Name,
 				"toolhead_id":  toolheadID,

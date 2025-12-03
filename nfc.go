@@ -25,21 +25,56 @@ type NFCSession struct {
 }
 
 // parseLocationParam extracts location information from location parameter
-// Supports two formats:
-// 1. "PrinterName - Toolhead N" - printer toolhead locations
-// 2. "LocationName" - non-printer locations (drybox, storage, etc.)
-func parseLocationParam(location string) (printerName string, toolheadID int, locationName string, isPrinterLocation bool, err error) {
-	// Check if it's a printer toolhead location (format: "PrinterName - Toolhead N")
-	if strings.Contains(location, " - Toolhead ") {
-		parts := strings.Split(location, " - Toolhead ")
+// Supports multiple formats:
+// 1. "PrinterName - Toolhead N" - printer toolhead locations (numeric ID)
+// 2. "PrinterName - CustomName" - printer toolhead locations (custom name)
+// 3. "LocationName" - non-printer locations (drybox, storage, etc.)
+func (b *FilamentBridge) parseLocationParam(location string) (printerName string, toolheadID int, locationName string, isPrinterLocation bool, err error) {
+	// Check if it contains " - " which indicates a printer toolhead location
+	if strings.Contains(location, " - ") {
+		parts := strings.SplitN(location, " - ", 2)
 		if len(parts) == 2 {
 			printerName = strings.TrimSpace(parts[0])
-			toolheadIDStr := strings.TrimSpace(parts[1])
-			toolheadID, err = strconv.Atoi(toolheadIDStr)
-			if err != nil {
-				return "", 0, "", false, fmt.Errorf("invalid toolhead ID in location '%s': %w", location, err)
+			toolheadPart := strings.TrimSpace(parts[1])
+
+			// First, try to parse as numeric ID (old format: "Toolhead N")
+			if strings.HasPrefix(toolheadPart, "Toolhead ") {
+				toolheadIDStr := strings.TrimPrefix(toolheadPart, "Toolhead ")
+				toolheadID, err = strconv.Atoi(toolheadIDStr)
+				if err == nil {
+					return printerName, toolheadID, location, true, nil
+				}
 			}
-			return printerName, toolheadID, location, true, nil
+
+			// If not numeric, try to find by custom name (new format)
+			// Get all printer configs to find matching printer and toolhead
+			printerConfigs, err := b.GetAllPrinterConfigs()
+			if err == nil {
+				for printerID, printerConfig := range printerConfigs {
+					if printerConfig.Name == printerName {
+						// Get toolhead names for this printer
+						toolheadNames, err := b.GetAllToolheadNames(printerID)
+						if err == nil {
+							// Look for matching display name
+							for tid, displayName := range toolheadNames {
+								if displayName == toolheadPart {
+									return printerName, tid, location, true, nil
+								}
+							}
+						}
+						// Also check default names
+						for tid := 0; tid < printerConfig.Toolheads; tid++ {
+							defaultName := fmt.Sprintf("Toolhead %d", tid)
+							if defaultName == toolheadPart {
+								return printerName, tid, location, true, nil
+							}
+						}
+					}
+				}
+			}
+
+			// If we couldn't parse it as a toolhead location, treat as regular location
+			// This maintains backward compatibility
 		}
 	}
 
@@ -220,15 +255,36 @@ func (b *FilamentBridge) AssignSpoolToLocation(spoolID int, printerName string, 
 			return fmt.Errorf("failed to set toolhead mapping: %w", err)
 		}
 
-		// Update Spoolman location using proper location entities
-		locationName := fmt.Sprintf("%s - Toolhead %d", printerName, toolheadID)
+		// Get toolhead display name (custom or default)
+		// Find printer ID first
+		printerConfigs, err := b.GetAllPrinterConfigs()
+		var displayName string
+		if err == nil {
+			for printerID, printerConfig := range printerConfigs {
+				if printerConfig.Name == printerName {
+					name, err := b.GetToolheadName(printerID, toolheadID)
+					if err == nil {
+						displayName = name
+					} else {
+						displayName = fmt.Sprintf("Toolhead %d", toolheadID)
+					}
+					break
+				}
+			}
+		}
+		if displayName == "" {
+			displayName = fmt.Sprintf("Toolhead %d", toolheadID)
+		}
+
+		// Update Spoolman location using proper location entities with custom name
+		locationName := fmt.Sprintf("%s - %s", printerName, displayName)
 		if err := b.spoolman.UpdateSpoolLocation(spoolID, locationName); err != nil {
 			// If Spoolman update fails, we should still log it but not fail the entire operation
 			// since the FilaBridge mapping is more critical
 			log.Printf("Warning: Failed to update Spoolman location for spool %d: %v", spoolID, err)
 		}
 
-		log.Printf("Successfully assigned spool %d to %s toolhead %d", spoolID, printerName, toolheadID)
+		log.Printf("Successfully assigned spool %d to %s toolhead %d (%s)", spoolID, printerName, toolheadID, displayName)
 	} else {
 		// This is a non-printer location (drybox, storage, etc.)
 		// First, check if this spool is currently assigned to any toolhead and clear it

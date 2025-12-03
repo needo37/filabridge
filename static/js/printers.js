@@ -1,5 +1,13 @@
 // FilaBridge Dashboard - Printer Management Functions
 
+// Helper function to escape HTML attribute values to prevent XSS
+function escapeHtmlAttribute(value) {
+    if (value == null) return '';
+    const div = document.createElement('div');
+    div.textContent = value;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // Printer Management Functions
 function loadPrinters() {
     fetch('/api/printers')
@@ -20,12 +28,13 @@ function loadPrinters() {
                     const toolheadNames = printer.toolhead_names || {};
                     for (let toolheadID = 0; toolheadID < (printer.toolheads || 1); toolheadID++) {
                         const currentName = toolheadNames[toolheadID] || `Toolhead ${toolheadID}`;
+                        const escapedName = escapeHtmlAttribute(currentName);
                         toolheadNamesHTML += `
                             <div class="form-row" style="margin-bottom: 10px;">
                                 <label style="min-width: 120px;">Toolhead ${toolheadID}:</label>
                                 <input type="text" 
                                        id="toolhead-name-${printerId}-${toolheadID}" 
-                                       value="${currentName}" 
+                                       value="${escapedName}" 
                                        class="toolhead-name-input"
                                        data-printer-id="${printerId}"
                                        data-toolhead-id="${toolheadID}"

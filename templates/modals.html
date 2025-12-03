@@ -59,8 +59,8 @@
             <h3>Edit Printer</h3>
             <button class="close" onclick="closeEditPrinterModal()">&times;</button>
         </div>
-        <form id="editPrinterForm" onsubmit="updatePrinter(event)">
-            <input type="hidden" id="editPrinterId" name="id">
+        <form id="editPrinterForm">
+            <input type="hidden" id="editPrinterId" name="printerId">
             <div class="form-group">
                 <label for="editPrinterName">Printer Name *</label>
                 <input type="text" id="editPrinterName" name="name" required>

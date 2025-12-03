@@ -104,6 +104,13 @@ function closeAddPrinterModal() {
 
 function closeEditPrinterModal() {
     document.getElementById('editPrinterModal').style.display = 'none';
+    
+    // Ensure button state is reset when modal is closed
+    const submitButton = document.querySelector('#editPrinterForm button[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Update Printer';
+    }
 }
 
 // Close modal when clicking outside of it
@@ -170,9 +177,20 @@ document.getElementById('editPrinterForm').addEventListener('submit', function(e
     const apiKey = formData.get('api_key');
     const toolheads = parseInt(formData.get('toolheads'));
     
+    // Validate printerId is present
+    if (!printerId) {
+        alert('Error: Printer ID is missing. Please try again.');
+        return;
+    }
+    
     // Show loading state
     const submitButton = this.querySelector('button[type="submit"]');
-    const originalText = submitButton.textContent;
+    if (!submitButton) {
+        alert('Error: Submit button not found.');
+        return;
+    }
+    
+    const originalText = submitButton.textContent || 'Update Printer';
     submitButton.disabled = true;
     submitButton.textContent = 'Updating...';
     
@@ -202,9 +220,11 @@ document.getElementById('editPrinterForm').addEventListener('submit', function(e
         loadPrinters();
     })
     .catch(error => {
-        // Reset button state
-        submitButton.disabled = false;
-        submitButton.textContent = originalText;
+        // Reset button state - ensure it always happens
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = originalText;
+        }
         alert('Error updating printer: ' + error.message);
     });
 });

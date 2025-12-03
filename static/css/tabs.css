@@ -88,3 +88,44 @@
     display: block;
     overflow: visible;
 }
+
+/* Settings Sub-tabs */
+.settings-tabs {
+    display: flex;
+    border-bottom: 2px solid rgba(255,255,255,0.1);
+    margin-bottom: 20px;
+}
+
+.settings-tab {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border-radius: 8px 8px 0 0;
+    padding: 12px 20px;
+    margin-right: 5px;
+}
+
+.settings-tab:hover {
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+}
+
+.settings-tab.active {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border-bottom: 3px solid #4CAF50;
+}
+
+.settings-tab-content {
+    display: none;
+    overflow: visible;
+}
+
+.settings-tab-content.active {
+    display: block;
+    overflow: visible;
+}

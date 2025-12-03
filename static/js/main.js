@@ -22,15 +22,75 @@ function switchTab(tabName) {
     
     // Load configuration when settings tab is opened
     if (tabName === 'settings') {
-        loadConfiguration();
-        loadAdvancedSettings();
-        loadAutoAssignSettings();
+        // Load data for the currently active settings sub-tab
+        const activeSettingsTab = document.querySelector('.settings-tab.active');
+        if (activeSettingsTab) {
+            // Determine which tab is active and load its data
+            const activeTabContent = document.querySelector('.settings-tab-content.active');
+            if (activeTabContent) {
+                const tabId = activeTabContent.id.replace('-tab', '');
+                if (tabId === 'getting-started') {
+                    // Getting Started tab doesn't need data loading
+                } else if (tabId === 'basic-config') {
+                    loadConfiguration();
+                } else if (tabId === 'printers') {
+                    loadPrinters();
+                } else if (tabId === 'advanced') {
+                    loadAdvancedSettings();
+                    loadAutoAssignSettings();
+                }
+            }
+        }
     }
 }
 
 function toggleConfig() {
     // Switch to the settings tab
     switchTab('settings');
+}
+
+// Settings sub-tab switching functionality
+function switchSettingsTab(tabName, clickedElement) {
+    // Hide all settings tab contents
+    document.querySelectorAll('.settings-tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Remove active class from all settings tabs
+    document.querySelectorAll('.settings-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab content
+    const targetTab = document.getElementById(tabName + '-tab');
+    if (targetTab) {
+        targetTab.classList.add('active');
+    }
+    
+    // Add active class to clicked tab
+    if (clickedElement) {
+        clickedElement.classList.add('active');
+    } else {
+        // Fallback: find the tab button by onclick attribute
+        const tabButtons = document.querySelectorAll('.settings-tab');
+        tabButtons.forEach(btn => {
+            if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(tabName)) {
+                btn.classList.add('active');
+            }
+        });
+    }
+    
+    // Load data for specific tabs
+    if (tabName === 'getting-started') {
+        // Getting Started tab doesn't need data loading
+    } else if (tabName === 'basic-config') {
+        loadConfiguration();
+    } else if (tabName === 'printers') {
+        loadPrinters();
+    } else if (tabName === 'advanced') {
+        loadAdvancedSettings();
+        loadAutoAssignSettings();
+    }
 }
 
 // Configuration Management
@@ -167,6 +227,7 @@ function resetAdvancedSettings() {
 let autoAssignCheckboxHandler = null;
 
 function loadAutoAssignSettings() {
+    // First, load the settings
     fetch('/api/config/auto-assign-previous-spool')
         .then(response => response.json())
         .then(data => {
@@ -179,26 +240,78 @@ function loadAutoAssignSettings() {
             const location = data.location || '';
             
             document.getElementById('autoAssignPreviousSpoolEnabled').checked = enabled;
-            document.getElementById('autoAssignPreviousSpoolLocation').value = location;
             
-            // Show/hide location input based on checkbox
+            // Show/hide location dropdown based on checkbox
             const locationGroup = document.getElementById('autoAssignLocationGroup');
             if (locationGroup) {
                 locationGroup.style.display = enabled ? 'block' : 'none';
             }
             
-            // Remove existing event listener if it exists
+            // Load locations and populate dropdown
+            return fetch('/api/locations')
+                .then(response => response.json())
+                .then(locationsData => {
+                    if (locationsData.error) {
+                        console.error('Error loading locations:', locationsData.error);
+                        return;
+                    }
+                    
+                    const locationSelect = document.getElementById('autoAssignPreviousSpoolLocation');
+                    if (!locationSelect) return;
+                    
+                    // Clear existing options except the first one
+                    locationSelect.innerHTML = '<option value="">Select a location...</option>';
+                    
+                    // Filter out printer toolhead locations (we only want storage locations)
+                    const storageLocations = locationsData.locations.filter(loc => {
+                        return !loc.is_virtual && loc.type !== 'printer';
+                    });
+                    
+                    // Sort locations alphabetically by name
+                    storageLocations.sort((a, b) => {
+                        const nameA = (a.name || '').toLowerCase();
+                        const nameB = (b.name || '').toLowerCase();
+                        return nameA.localeCompare(nameB);
+                    });
+                    
+                    // Add locations to dropdown
+                    storageLocations.forEach(loc => {
+                        const option = document.createElement('option');
+                        option.value = loc.name;
+                        option.textContent = loc.name;
+                        if (loc.name === location) {
+                            option.selected = true;
+                        }
+                        locationSelect.appendChild(option);
+                    });
+                    
+                    // If the saved location is not in the list (e.g., it was deleted), add it as selected
+                    if (location && !storageLocations.find(loc => loc.name === location)) {
+                        const option = document.createElement('option');
+                        option.value = location;
+                        option.textContent = location + ' (not found)';
+                        option.selected = true;
+                        locationSelect.appendChild(option);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading locations:', error);
+                });
+        })
+        .then(() => {
+            // Set up checkbox change handler
             const checkbox = document.getElementById('autoAssignPreviousSpoolEnabled');
-            if (checkbox) {
+            const locationGroup = document.getElementById('autoAssignLocationGroup');
+            
+            if (checkbox && locationGroup) {
+                // Remove existing event listener if it exists
                 if (autoAssignCheckboxHandler) {
                     checkbox.removeEventListener('change', autoAssignCheckboxHandler);
                 }
                 
                 // Create and store the new handler function
                 autoAssignCheckboxHandler = function() {
-                    if (locationGroup) {
-                        locationGroup.style.display = this.checked ? 'block' : 'none';
-                    }
+                    locationGroup.style.display = this.checked ? 'block' : 'none';
                 };
                 
                 // Add the event listener
@@ -212,7 +325,8 @@ function loadAutoAssignSettings() {
 
 function saveAutoAssignSettings() {
     const enabled = document.getElementById('autoAssignPreviousSpoolEnabled').checked;
-    const location = document.getElementById('autoAssignPreviousSpoolLocation').value.trim();
+    const locationSelect = document.getElementById('autoAssignPreviousSpoolLocation');
+    const location = locationSelect ? locationSelect.value.trim() : '';
     
     const settings = {
         enabled: enabled,

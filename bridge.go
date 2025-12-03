@@ -1056,27 +1056,42 @@ func (b *FilamentBridge) GetStatus() (*PrinterStatus, error) {
 		mappings, err := b.GetToolheadMappings(printerName)
 		if err != nil {
 			log.Printf("Error getting toolhead mappings for %s: %v", printerName, err)
-			status.ToolheadMappings[printerID] = make(map[int]ToolheadMapping)
-		} else {
-			// Enhance mappings with display names
-			enhancedMappings := make(map[int]ToolheadMapping)
-			toolheadNames, err := b.GetAllToolheadNames(printerID)
-			if err != nil {
-				log.Printf("Warning: Failed to get toolhead names for printer %s: %v", printerID, err)
-				toolheadNames = make(map[int]string)
+			mappings = make(map[int]ToolheadMapping)
+		}
+
+		// Get toolhead names for this printer
+		toolheadNames, err := b.GetAllToolheadNames(printerID)
+		if err != nil {
+			log.Printf("Warning: Failed to get toolhead names for printer %s: %v", printerID, err)
+			toolheadNames = make(map[int]string)
+		}
+
+		// Create enhanced mappings for ALL toolheads (including unmapped ones)
+		enhancedMappings := make(map[int]ToolheadMapping)
+		for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
+			// Get display name (custom or default)
+			var displayName string
+			if name, exists := toolheadNames[toolheadID]; exists {
+				displayName = name
+			} else {
+				displayName = fmt.Sprintf("Toolhead %d", toolheadID)
 			}
 
-			for toolheadID, mapping := range mappings {
-				// Get display name (custom or default)
-				if displayName, exists := toolheadNames[toolheadID]; exists {
-					mapping.DisplayName = displayName
-				} else {
-					mapping.DisplayName = fmt.Sprintf("Toolhead %d", toolheadID)
-				}
+			// If this toolhead has a mapping, use it and add display name
+			if mapping, exists := mappings[toolheadID]; exists {
+				mapping.DisplayName = displayName
 				enhancedMappings[toolheadID] = mapping
+			} else {
+				// Create empty mapping with just display name for unmapped toolheads
+				enhancedMappings[toolheadID] = ToolheadMapping{
+					PrinterName: printerName,
+					ToolheadID:  toolheadID,
+					SpoolID:     0, // No spool mapped
+					DisplayName: displayName,
+				}
 			}
-			status.ToolheadMappings[printerID] = enhancedMappings
 		}
+		status.ToolheadMappings[printerID] = enhancedMappings
 	}
 
 	return status, nil

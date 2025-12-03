@@ -5,95 +5,113 @@
         <p>Configure FilaBridge and manage your printers</p>
     </div>
     
-    <!-- Configuration Section -->
-    <div class="config-section">
-        <h3>🔧 Configuration</h3>
-        <div id="config-form">
-            <p>Loading configuration...</p>
+    <!-- Settings Sub-tabs -->
+    <div class="settings-tabs">
+        <button class="settings-tab active" onclick="switchSettingsTab('getting-started', this)">📚 Getting Started</button>
+        <button class="settings-tab" onclick="switchSettingsTab('basic-config', this)">🔧 Basic Configuration</button>
+        <button class="settings-tab" onclick="switchSettingsTab('printers', this)">🖨️ Printers</button>
+        <button class="settings-tab" onclick="switchSettingsTab('advanced', this)">⚙️ Advanced Settings</button>
+    </div>
+    
+    <!-- Getting Started Tab -->
+    <div id="getting-started-tab" class="settings-tab-content active">
+        <div class="help-section">
+            <h4>📚 Getting Started</h4>
+            <ol>
+                <li><strong>Install Spoolman:</strong> Run <code>docker run -d --name spoolman -p 8000:8000 -v spoolman-data:/home/spoolman/data ghcr.io/donkie/spoolman:latest</code></li>
+                <li><strong>Add Printers:</strong> Click "Add Printer" in the Printers tab and enter your printer's IP address and API key</li>
+                <li><strong>Map Spools:</strong> Go to the "Filament Status" tab and assign spools to toolheads</li>
+                <li><strong>Start Printing:</strong> The system will automatically track filament usage!</li>
+            </ol>
         </div>
     </div>
     
-    <!-- Advanced Settings Section -->
-    <div class="config-section">
-        <h3>⚙️ Advanced Settings</h3>
-        <div class="help-text">
-            These settings control API timeouts and connection behavior. Only modify if you're experiencing connection issues.
+    <!-- Basic Configuration Tab -->
+    <div id="basic-config-tab" class="settings-tab-content">
+        <div class="config-section">
+            <h3>🔧 Basic Configuration</h3>
+            <div id="config-form">
+                <p>Loading configuration...</p>
+            </div>
         </div>
-        <div class="advanced-settings">
-            <div class="timeout-settings">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="prusalinkTimeout">PrusaLink API Timeout (seconds)</label>
-                        <input type="number" id="prusalinkTimeout" min="5" max="300" value="10">
-                        <small>How long to wait for PrusaLink API responses (5-300 seconds)</small>
+    </div>
+    
+    <!-- Printers Tab -->
+    <div id="printers-tab" class="settings-tab-content">
+        <div class="config-section">
+            <h3>🖨️ Printer Management</h3>
+            <div style="margin-bottom: 20px;">
+                <button class="btn" onclick="showAddPrinterForm()">➕ Add Printer</button>
+            </div>
+            <div id="printer-list">
+                <p>Loading printers...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Advanced Settings Tab -->
+    <div id="advanced-tab" class="settings-tab-content">
+        <div class="config-section">
+            <h3>⚙️ Advanced Settings</h3>
+            <div class="help-text">
+                These settings control API timeouts and connection behavior. Only modify if you're experiencing connection issues.
+            </div>
+            <div class="advanced-settings">
+                <div class="timeout-settings">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="prusalinkTimeout">PrusaLink API Timeout (seconds)</label>
+                            <input type="number" id="prusalinkTimeout" min="5" max="300" value="10">
+                            <small>How long to wait for PrusaLink API responses (5-300 seconds)</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="prusalinkFileDownloadTimeout">File Download Timeout (seconds)</label>
+                            <input type="number" id="prusalinkFileDownloadTimeout" min="10" max="600" value="60">
+                            <small>How long to wait for file downloads (10-600 seconds)</small>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="prusalinkFileDownloadTimeout">File Download Timeout (seconds)</label>
-                        <input type="number" id="prusalinkFileDownloadTimeout" min="10" max="600" value="60">
-                        <small>How long to wait for file downloads (10-600 seconds)</small>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="spoolmanTimeout">Spoolman API Timeout (seconds)</label>
+                            <input type="number" id="spoolmanTimeout" min="5" max="300" value="30">
+                            <small>How long to wait for Spoolman API responses (5-300 seconds)</small>
+                        </div>
+                        <div class="form-group">
+                            <!-- Empty for alignment -->
+                        </div>
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="spoolmanTimeout">Spoolman API Timeout (seconds)</label>
-                        <input type="number" id="spoolmanTimeout" min="5" max="300" value="30">
-                        <small>How long to wait for Spoolman API responses (5-300 seconds)</small>
-                    </div>
-                    <div class="form-group">
-                        <!-- Empty for alignment -->
-                    </div>
+                <div style="margin-top: 20px; text-align: center;">
+                    <button class="btn" onclick="saveAdvancedSettings()">💾 Save Advanced Settings</button>
+                    <button class="btn btn-secondary" onclick="resetAdvancedSettings()">🔄 Reset to Defaults</button>
                 </div>
             </div>
-            <div style="margin-top: 20px; text-align: center;">
-                <button class="btn" onclick="saveAdvancedSettings()">💾 Save Advanced Settings</button>
-                <button class="btn btn-secondary" onclick="resetAdvancedSettings()">🔄 Reset to Defaults</button>
+        </div>
+        
+        <!-- Spool Assignment Settings Section -->
+        <div class="config-section" style="margin-top: 30px;">
+            <h3>🔄 Spool Assignment Settings</h3>
+            <div class="help-text">
+                Automatically assign the previous spool to a default location when assigning a new spool to a toolhead. This is useful when you have a storage location (bin, shelf, drybox) where spools are kept when not in use.
+            </div>
+            <div class="spool-assignment-settings">
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="autoAssignPreviousSpoolEnabled" style="width: auto; cursor: pointer;">
+                        <span>Enable automatic assignment of previous spool to default location</span>
+                    </label>
+                </div>
+                <div class="form-group" id="autoAssignLocationGroup" style="display: none; margin-top: 15px;">
+                    <label for="autoAssignPreviousSpoolLocation">Default Location Name</label>
+                    <select id="autoAssignPreviousSpoolLocation" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #666; background: rgba(255,255,255,0.1); color: #fff;">
+                        <option value="">Select a location...</option>
+                    </select>
+                    <small>Select an existing location where spools will be automatically assigned when removed from a toolhead.</small>
+                </div>
+                <div style="margin-top: 20px; text-align: center;">
+                    <button class="btn" onclick="saveAutoAssignSettings()">💾 Save Spool Assignment Settings</button>
+                </div>
             </div>
         </div>
-    </div>
-    
-    <!-- Spool Assignment Settings Section -->
-    <div class="config-section">
-        <h3>🔄 Spool Assignment Settings</h3>
-        <div class="help-text">
-            Automatically assign the previous spool to a default location when assigning a new spool to a toolhead. This is useful when you have a storage location (bin, shelf, drybox) where spools are kept when not in use.
-        </div>
-        <div class="spool-assignment-settings">
-            <div class="form-group">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                    <input type="checkbox" id="autoAssignPreviousSpoolEnabled" style="width: auto; cursor: pointer;">
-                    <span>Enable automatic assignment of previous spool to default location</span>
-                </label>
-            </div>
-            <div class="form-group" id="autoAssignLocationGroup" style="display: none; margin-top: 15px;">
-                <label for="autoAssignPreviousSpoolLocation">Default Location Name</label>
-                <input type="text" id="autoAssignPreviousSpoolLocation" placeholder="e.g., Storage, Drybox, Shelf" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #666; background: rgba(255,255,255,0.1); color: #fff;">
-                <small>The location must already exist. If the location doesn't exist when assigning a spool, the auto-assignment will be skipped with a warning.</small>
-            </div>
-            <div style="margin-top: 20px; text-align: center;">
-                <button class="btn" onclick="saveAutoAssignSettings()">💾 Save Spool Assignment Settings</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Printer Management Section -->
-    <div class="config-section">
-        <h3>🖨️ Printer Management</h3>
-        <div style="margin-bottom: 20px;">
-            <button class="btn" onclick="showAddPrinterForm()">➕ Add Printer</button>
-        </div>
-        <div id="printer-list">
-            <p>Loading printers...</p>
-        </div>
-    </div>
-    
-    <!-- Help Section -->
-    <div class="help-section">
-        <h4>📚 Getting Started</h4>
-        <ol>
-            <li><strong>Install Spoolman:</strong> Run <code>docker run -d --name spoolman -p 8000:8000 -v spoolman-data:/home/spoolman/data ghcr.io/donkie/spoolman:latest</code></li>
-            <li><strong>Add Printers:</strong> Click "Add Printer" above and enter your printer's IP address and API key</li>
-            <li><strong>Map Spools:</strong> Go to the "Filament Status" tab and assign spools to toolheads</li>
-            <li><strong>Start Printing:</strong> The system will automatically track filament usage!</li>
-        </ol>
     </div>
 </div>

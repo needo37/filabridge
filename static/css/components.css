@@ -73,6 +73,11 @@
     border-color: #667eea;
 }
 
+.form-group select option {
+    background: #1a1a1a;
+    color: #fff;
+}
+
 .form-group input[type="password"] {
     border-color: #6f42c1;
 }

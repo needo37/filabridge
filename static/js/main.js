@@ -163,6 +163,9 @@ function resetAdvancedSettings() {
 }
 
 // Auto-Assign Previous Spool Settings Functions
+// Store the checkbox change handler so we can remove it before adding a new one
+let autoAssignCheckboxHandler = null;
+
 function loadAutoAssignSettings() {
     fetch('/api/config/auto-assign-previous-spool')
         .then(response => response.json())
@@ -184,14 +187,22 @@ function loadAutoAssignSettings() {
                 locationGroup.style.display = enabled ? 'block' : 'none';
             }
             
-            // Add event listener to checkbox to show/hide location input
+            // Remove existing event listener if it exists
             const checkbox = document.getElementById('autoAssignPreviousSpoolEnabled');
             if (checkbox) {
-                checkbox.addEventListener('change', function() {
+                if (autoAssignCheckboxHandler) {
+                    checkbox.removeEventListener('change', autoAssignCheckboxHandler);
+                }
+                
+                // Create and store the new handler function
+                autoAssignCheckboxHandler = function() {
                     if (locationGroup) {
                         locationGroup.style.display = this.checked ? 'block' : 'none';
                     }
-                });
+                };
+                
+                // Add the event listener
+                checkbox.addEventListener('change', autoAssignCheckboxHandler);
             }
         })
         .catch(error => {

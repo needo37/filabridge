@@ -5,6 +5,25 @@ All notable changes to FilaBridge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2] - 2025-12-03
+
+### Added
+
+- enhance settings UI with sub-tabs for better organization and add functionality for automatic spool assignment with location selection
+- implement auto-assignment of previous spools with configuration options and API endpoints
+- add toolhead name management with custom display names and API endpoints for retrieval and updates
+
+### Fixed
+
+- add HTML escaping for toolhead names to prevent XSS vulnerabilities
+- handle null values for remaining weight in spool display across dropdowns and NFC tags
+- identify and skip virtual printer toolhead locations in location management
+- round remaining weight in spool tag details for improved display
+
+### Changed
+
+- improve event listener management for auto-assign previous spool checkbox
+
 ## [v0.1.5] - 2025-11-18
 
 ### Added

@@ -1168,6 +1168,30 @@ func (b *FilamentBridge) DeleteLocation(name string) error {
 	return nil
 }
 
+// isVirtualPrinterToolheadLocation checks if a location name matches the pattern
+// of a virtual printer toolhead location (e.g., "PrinterName - Toolhead 0")
+func (b *FilamentBridge) isVirtualPrinterToolheadLocation(name string) bool {
+	// Get all printer configurations
+	printerConfigs, err := b.GetAllPrinterConfigs()
+	if err != nil {
+		// If we can't get printer configs, assume it's not a virtual location
+		log.Printf("Warning: Could not get printer configurations to check virtual location: %v", err)
+		return false
+	}
+
+	// Check if the name matches any printer's toolhead location pattern
+	for _, printerConfig := range printerConfigs {
+		for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
+			expectedName := fmt.Sprintf("%s - Toolhead %d", printerConfig.Name, toolheadID)
+			if name == expectedName {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // GetLocationStatus returns detailed status information for a location
 func (b *FilamentBridge) GetLocationStatus(name string) (*LocationStatus, error) {
 	// Get FilaBridge location
@@ -1255,6 +1279,12 @@ func (b *FilamentBridge) AutoSyncSpoolmanLocations() error {
 
 		// Skip if location already exists in FilaBridge
 		if fbLocationMap[smLocation.Name] {
+			continue
+		}
+
+		// Skip if location matches a virtual printer toolhead location
+		if b.isVirtualPrinterToolheadLocation(smLocation.Name) {
+			log.Printf("AutoSyncSpoolmanLocations: Skipping location '%s' from Spoolman - it matches a virtual printer toolhead location", smLocation.Name)
 			continue
 		}
 

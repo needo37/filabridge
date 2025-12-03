@@ -1213,6 +1213,13 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 
 	// Generate location URLs for FilaBridge locations
 	for _, location := range fbLocations {
+		// Skip database locations that match virtual printer toolhead pattern
+		// This provides a safety net in case duplicates already exist in the database
+		if ws.bridge.isVirtualPrinterToolheadLocation(location.Name) {
+			log.Printf("nfcUrlsHandler: Skipping database location '%s' - it matches a virtual printer toolhead location", location.Name)
+			continue
+		}
+
 		locationParam := location.Name
 		url := fmt.Sprintf("http://%s/api/nfc/assign?location=%s", c.Request.Host, locationParam)
 

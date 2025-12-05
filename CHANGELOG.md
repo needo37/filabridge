@@ -5,6 +5,20 @@ All notable changes to FilaBridge will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.2] - 2025-12-05
+
+### Added
+
+- add URL copy functionality and properly encode NFC URLs.
+
+### Fixed
+
+- Update location management to reflect API limitations
+
+### Changed
+
+- migrate location management from FilaBridge to Spoolman, removing legacy location functions and updating related API endpoints
+
 ## [v0.2.1] - 2025-12-03
 
 ### Added

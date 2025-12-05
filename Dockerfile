@@ -32,7 +32,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk update && apk --no-cache add ca-certificates sqlite
+# Using --no-scripts to work around Alpine 3.23 trigger script issues with QEMU emulation on arm64
+RUN apk update && apk --no-cache --no-scripts add ca-certificates sqlite
 
 # Create app directory
 WORKDIR /app

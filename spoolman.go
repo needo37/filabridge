@@ -20,6 +20,11 @@ type SpoolmanClient struct {
 	password   string
 }
 
+// GetBaseURL returns the Spoolman base URL
+func (c *SpoolmanClient) GetBaseURL() string {
+	return c.baseURL
+}
+
 // SpoolmanSpool represents a spool from Spoolman API
 type SpoolmanSpool struct {
 	ID              int                    `json:"id"`
@@ -425,9 +430,11 @@ func (c *SpoolmanClient) GetLocations() ([]SpoolmanLocation, error) {
 	return nil, fmt.Errorf("error decoding locations from Spoolman: unexpected JSON shape")
 }
 
-// GetOrCreateLocation gets an existing location by name or creates it if it doesn't exist
+// GetOrCreateLocation gets an existing location by name
+// Note: Spoolman API does not support creating locations via POST.
+// Locations must be created manually in Spoolman UI or are auto-created when referenced in spools.
 func (c *SpoolmanClient) GetOrCreateLocation(name string) (*SpoolmanLocation, error) {
-	// First try to get existing locations
+	// Get existing locations
 	locations, err := c.GetLocations()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get locations: %w", err)
@@ -440,56 +447,21 @@ func (c *SpoolmanClient) GetOrCreateLocation(name string) (*SpoolmanLocation, er
 		}
 	}
 
-	// Location doesn't exist, try to create it
-	// If creation fails, return a warning but don't fail the entire operation
-	createdLocation, err := c.CreateLocation(name)
-	if err != nil {
-		// Log the error but return a dummy location so the system can continue
-		log.Printf("Warning: Could not create location '%s' in Spoolman: %v", name, err)
-		// Return a dummy location with the name
-		return &SpoolmanLocation{
-			ID:   0, // Dummy ID
-			Name: name,
-		}, nil
-	}
-
-	return createdLocation, nil
+	// Location doesn't exist in Spoolman
+	// Spoolman API doesn't support POST to create locations - they must be created
+	// manually in the UI or will be auto-created when referenced in a spool
+	// Return a dummy location so the system can continue
+	return &SpoolmanLocation{
+		ID:   0, // Dummy ID - location doesn't exist yet
+		Name: name,
+	}, nil
 }
 
-// CreateLocation creates a new location in Spoolman
+// CreateLocation is deprecated - Spoolman API does not support creating locations via POST.
+// Locations must be created manually in Spoolman UI or are auto-created when referenced in spools.
+// This function is kept for backward compatibility but will always return an error.
 func (c *SpoolmanClient) CreateLocation(name string) (*SpoolmanLocation, error) {
-	locationData := map[string]interface{}{
-		"name": name,
-	}
-
-	jsonData, err := json.Marshal(locationData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal location data: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", c.baseURL+"/api/v1/location", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	c.addAuthHeader(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error creating location in Spoolman: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		return nil, c.handleAPIError(resp)
-	}
-
-	var location SpoolmanLocation
-	if err := json.NewDecoder(resp.Body).Decode(&location); err != nil {
-		return nil, fmt.Errorf("error decoding created location from Spoolman: %w", err)
-	}
-
-	return &location, nil
+	return nil, fmt.Errorf("spoolman API does not support creating locations via POST. Locations must be created manually in Spoolman UI or will be auto-created when referenced in a spool")
 }
 
 // FindLocationByName searches for an existing location by name

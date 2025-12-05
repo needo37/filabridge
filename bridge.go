@@ -183,6 +183,12 @@ func (b *FilamentBridge) initDatabase() error {
 		// Don't fail initialization if migration fails
 	}
 
+	// Create Spoolman locations for existing toolhead mappings
+	if err := b.migrateToolheadMappingsToSpoolman(); err != nil {
+		log.Printf("Warning: Failed to migrate toolhead mappings to Spoolman: %v", err)
+		// Don't fail initialization if migration fails
+	}
+
 	return nil
 }
 
@@ -218,17 +224,99 @@ func (b *FilamentBridge) migrateLocationsToSpoolman() error {
 			continue
 		}
 
-		// Create location in Spoolman if it doesn't exist
-		if _, err := b.spoolman.GetOrCreateLocation(locationName); err != nil {
-			log.Printf("Warning: Failed to migrate location '%s' to Spoolman: %v", locationName, err)
+		// Check if location exists in Spoolman
+		// Note: Spoolman API doesn't support creating locations via POST.
+		// Locations must be created manually in Spoolman UI or are auto-created when referenced in spools.
+		existingLocation, err := b.spoolman.FindLocationByName(locationName)
+		if err != nil {
+			log.Printf("Warning: Failed to check if location '%s' exists in Spoolman: %v", locationName, err)
+			continue
+		}
+		
+		if existingLocation == nil {
+			log.Printf("Migration: Location '%s' does not exist in Spoolman. It will be created when referenced in a spool, or can be created manually in Spoolman UI.", locationName)
 		} else {
 			migratedCount++
-			log.Printf("Migration: Migrated location '%s' to Spoolman", locationName)
+			log.Printf("Migration: Location '%s' already exists in Spoolman", locationName)
 		}
 	}
 
 	if migratedCount > 0 {
 		log.Printf("Migration: Successfully migrated %d location(s) from FilaBridge to Spoolman", migratedCount)
+	}
+
+	return nil
+}
+
+// migrateToolheadMappingsToSpoolman creates Spoolman locations for existing toolhead mappings
+func (b *FilamentBridge) migrateToolheadMappingsToSpoolman() error {
+	// Get all printer configs
+	printerConfigs, err := b.GetAllPrinterConfigs()
+	if err != nil {
+		return fmt.Errorf("failed to get printer configs: %w", err)
+	}
+
+	// Get all toolhead mappings
+	allMappings, err := b.GetAllToolheadMappings()
+	if err != nil {
+		return fmt.Errorf("failed to get toolhead mappings: %w", err)
+	}
+
+	createdCount := 0
+	for printerName, printerMappings := range allMappings {
+		// Find the printer ID for this printer name
+		var printerID string
+		for pid, config := range printerConfigs {
+			if config.Name == printerName {
+				printerID = pid
+				break
+			}
+		}
+
+		if printerID == "" {
+			log.Printf("Migration: Could not find printer ID for printer name '%s', skipping", printerName)
+			continue
+		}
+
+		// Get toolhead names for this printer
+		toolheadNames, err := b.GetAllToolheadNames(printerID)
+		if err != nil {
+			log.Printf("Warning: Failed to get toolhead names for printer %s: %v", printerID, err)
+			toolheadNames = make(map[int]string)
+		}
+
+		// Create locations for each toolhead mapping
+		for toolheadID := range printerMappings {
+			// Get display name (custom or default)
+			var displayName string
+			if name, exists := toolheadNames[toolheadID]; exists {
+				displayName = name
+			} else {
+				displayName = fmt.Sprintf("Toolhead %d", toolheadID)
+			}
+
+			locationName := fmt.Sprintf("%s - %s", printerName, displayName)
+
+			// Check if location exists in Spoolman
+			// Note: Spoolman API doesn't support creating locations via POST.
+			// Locations will be auto-created when spools are assigned to toolheads.
+			existingLocation, err := b.spoolman.FindLocationByName(locationName)
+			if err != nil {
+				log.Printf("Warning: Failed to check if toolhead location '%s' exists in Spoolman: %v", locationName, err)
+				continue
+			}
+			
+			if existingLocation == nil {
+				log.Printf("Migration: Toolhead location '%s' does not exist in Spoolman. It will be created when a spool is assigned to this toolhead.", locationName)
+			} else {
+				createdCount++
+				log.Printf("Migration: Toolhead location '%s' already exists in Spoolman", locationName)
+			}
+		}
+	}
+
+	if createdCount > 0 {
+		log.Printf("Migration: Successfully created %d toolhead location(s) in Spoolman", createdCount)
 	}
 
 	return nil

@@ -173,12 +173,35 @@ async function loadLocationTags() {
         const locationUrls = data.urls.filter(url => url.type === 'location');
         console.log('Location URLs:', locationUrls);
         
-        if (locationUrls.length === 0) {
-            container.innerHTML = '<p>No locations available</p>';
-            return;
+        // Clear container and add informational message
+        container.innerHTML = '';
+        
+        // Add informational banner about Spoolman locations
+        const spoolmanURL = data.spoolman_url || '';
+        const messageBanner = document.createElement('div');
+        messageBanner.className = 'nfc-info-banner';
+        messageBanner.style.cssText = 'background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; margin-bottom: 15px; border-radius: 8px;';
+        
+        let bannerHTML = '<strong>ℹ️ Location Management:</strong><br>';
+        bannerHTML += 'It is not possible via the Spoolman API to add locations automatically. ';
+        bannerHTML += 'To create locations, please do so via Spoolman. Then they will show up here.';
+        
+        if (spoolmanURL) {
+            // Append /locations to the Spoolman URL
+            const spoolmanLocationsURL = spoolmanURL.replace(/\/$/, '') + '/locations';
+            bannerHTML += '<br><br><a href="' + spoolmanLocationsURL + '" target="_blank" style="color: #856404; text-decoration: underline; font-weight: bold;">Open Spoolman →</a>';
         }
         
-        container.innerHTML = '';
+        messageBanner.innerHTML = bannerHTML;
+        container.appendChild(messageBanner);
+        
+        if (locationUrls.length === 0) {
+            const noLocationsMsg = document.createElement('p');
+            noLocationsMsg.textContent = 'No locations available. Create locations in Spoolman to see them here.';
+            noLocationsMsg.style.cssText = 'padding: 20px; text-align: center; color: #666;';
+            container.appendChild(noLocationsMsg);
+            return;
+        }
         
         locationUrls.forEach(url => {
             const item = document.createElement('div');

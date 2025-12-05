@@ -1413,15 +1413,15 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 		}
 	}
 
-	// Generate location URLs for Spoolman locations (excluding printer toolhead locations)
+	// Generate location URLs for Spoolman locations only (no virtual printer toolhead locations)
 	for _, location := range spoolmanLocations {
 		// Skip archived locations
 		if location.Archived {
 			continue
 		}
 
-		// Skip printer toolhead locations (they're added separately below)
-		if printerLocationNames[location.Name] {
+		// Skip locations with empty or whitespace-only names
+		if strings.TrimSpace(location.Name) == "" {
 			continue
 		}
 
@@ -1440,6 +1440,7 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 				"display_name":   location.Name,
 				"url":            nfcUrl,
 				"qr_code_base64": "",
+				"is_local_only":  false, // All Spoolman locations are synced
 			})
 			continue
 		}
@@ -1452,60 +1453,8 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 			"display_name":   location.Name,
 			"url":            nfcUrl,
 			"qr_code_base64": qrCodeBase64,
+			"is_local_only":  false, // All Spoolman locations are synced
 		})
-	}
-
-	// Generate virtual printer toolhead locations (these will be created in Spoolman on-demand)
-	for printerID, printerConfig := range printerConfigs {
-		// Get toolhead names for this printer
-		toolheadNames, err := ws.bridge.GetAllToolheadNames(printerID)
-		if err != nil {
-			log.Printf("Warning: Failed to get toolhead names for printer %s: %v", printerID, err)
-			toolheadNames = make(map[int]string)
-		}
-
-		for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
-			// Get display name (custom or default)
-			var displayName string
-			if name, exists := toolheadNames[toolheadID]; exists {
-				displayName = name
-			} else {
-				displayName = fmt.Sprintf("Toolhead %d", toolheadID)
-			}
-
-			locationParam := fmt.Sprintf("%s - %s", printerConfig.Name, displayName)
-			nfcUrl := fmt.Sprintf("http://%s/api/nfc/assign?location=%s", c.Request.Host, neturl.QueryEscape(locationParam))
-
-			// Generate QR code
-			qrCode, err := qrcode.Encode(nfcUrl, qrcode.Medium, 256)
-			if err != nil {
-				log.Printf("Error generating QR code for printer location %s: %v", locationParam, err)
-				// Continue without QR code if generation fails
-				urls = append(urls, gin.H{
-					"type":           "location",
-					"location_type":  "printer",
-					"location_name":  locationParam,
-					"display_name":   locationParam,
-					"printer_name":   printerConfig.Name,
-					"toolhead_id":    toolheadID,
-					"url":            nfcUrl,
-					"qr_code_base64": "",
-				})
-				continue
-			}
-
-			qrCodeBase64 := base64.StdEncoding.EncodeToString(qrCode)
-			urls = append(urls, gin.H{
-				"type":           "location",
-				"location_type":  "printer",
-				"location_name":  locationParam,
-				"display_name":   locationParam,
-				"printer_name":   printerConfig.Name,
-				"toolhead_id":    toolheadID,
-				"url":            nfcUrl,
-				"qr_code_base64": qrCodeBase64,
-			})
-		}
 	}
 
 	// Sort URLs: filaments first, then spools, then locations alphabetically by display name
@@ -1573,7 +1522,13 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 		return false
 	})
 
-	c.JSON(http.StatusOK, gin.H{"urls": urls})
+	// Get Spoolman URL for the response
+	spoolmanURL := ws.bridge.spoolman.GetBaseURL()
+
+	c.JSON(http.StatusOK, gin.H{
+		"urls":         urls,
+		"spoolman_url": spoolmanURL,
+	})
 }
 
 // nfcSessionStatusHandler returns the current session status
@@ -1605,7 +1560,7 @@ func (ws *WebServer) nfcSessionStatusHandler(c *gin.Context) {
 
 // Location Management Handlers
 
-// getLocationsHandler returns all Spoolman locations plus virtual printer toolheads
+// getLocationsHandler returns only Spoolman locations (no virtual printer toolheads)
 func (ws *WebServer) getLocationsHandler(c *gin.Context) {
 	// Get Spoolman locations
 	spoolmanLocations, err := ws.bridge.spoolman.GetLocations()
@@ -1614,77 +1569,16 @@ func (ws *WebServer) getLocationsHandler(c *gin.Context) {
 		spoolmanLocations = []SpoolmanLocation{}
 	}
 
-	// Get printer configurations for virtual toolhead locations
-	printerConfigs, err := ws.bridge.GetAllPrinterConfigs()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Create a map of printer toolhead location names for quick lookup
-	printerLocationNames := make(map[string]bool)
-	for printerID, printerConfig := range printerConfigs {
-		// Get toolhead names for this printer
-		toolheadNames, err := ws.bridge.GetAllToolheadNames(printerID)
-		if err != nil {
-			log.Printf("Warning: Failed to get toolhead names for printer %s: %v", printerID, err)
-			toolheadNames = make(map[int]string)
-		}
-
-		for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
-			// Get display name (custom or default)
-			var displayName string
-			if name, exists := toolheadNames[toolheadID]; exists {
-				displayName = name
-			} else {
-				displayName = fmt.Sprintf("Toolhead %d", toolheadID)
-			}
-
-			locationName := fmt.Sprintf("%s - %s", printerConfig.Name, displayName)
-			printerLocationNames[locationName] = true
-		}
-	}
-
-	// Create virtual printer toolhead locations
+	// Only return Spoolman locations (no virtual printer toolhead locations)
 	var allLocations []gin.H
-	for printerID, printerConfig := range printerConfigs {
-		// Get toolhead names for this printer
-		toolheadNames, err := ws.bridge.GetAllToolheadNames(printerID)
-		if err != nil {
-			log.Printf("Warning: Failed to get toolhead names for printer %s: %v", printerID, err)
-			toolheadNames = make(map[int]string)
-		}
-
-		for toolheadID := 0; toolheadID < printerConfig.Toolheads; toolheadID++ {
-			// Get display name (custom or default)
-			var displayName string
-			if name, exists := toolheadNames[toolheadID]; exists {
-				displayName = name
-			} else {
-				displayName = fmt.Sprintf("Toolhead %d", toolheadID)
-			}
-
-			locationName := fmt.Sprintf("%s - %s", printerConfig.Name, displayName)
-			allLocations = append(allLocations, gin.H{
-				"id":           fmt.Sprintf("printer_%s_%d", printerConfig.Name, toolheadID),
-				"name":         locationName,
-				"type":         "printer",
-				"printer_name": printerConfig.Name,
-				"toolhead_id":  toolheadID,
-				"is_virtual":   true,
-			})
-		}
-	}
-
-	// Add Spoolman locations (excluding printer toolhead locations which are already added above)
 	for _, loc := range spoolmanLocations {
 		// Skip archived locations
 		if loc.Archived {
 			continue
 		}
 
-		// Skip if this is a printer toolhead location (already added above)
-		if printerLocationNames[loc.Name] {
+		// Skip locations with empty or whitespace-only names
+		if strings.TrimSpace(loc.Name) == "" {
 			continue
 		}
 
@@ -1695,7 +1589,13 @@ func (ws *WebServer) getLocationsHandler(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{"locations": allLocations})
+	// Get Spoolman URL for the message
+	spoolmanURL := ws.bridge.spoolman.GetBaseURL()
+
+	c.JSON(http.StatusOK, gin.H{
+		"locations":    allLocations,
+		"spoolman_url": spoolmanURL,
+	})
 }
 
 // getLocationStatusHandler returns detailed status information for a specific location

@@ -295,10 +295,8 @@ func (b *FilamentBridge) AssignSpoolToLocation(spoolID int, printerName string, 
 		// Update Spoolman location using proper location entities with custom name
 		locationName := fmt.Sprintf("%s - %s", printerName, displayName)
 		
-		// Ensure the location exists in Spoolman
-		if _, err := b.spoolman.GetOrCreateLocation(locationName); err != nil {
-			log.Printf("Warning: Failed to create/verify location '%s' in Spoolman: %v", locationName, err)
-		}
+		// Note: Spoolman API doesn't support creating locations via POST.
+		// The location will be auto-created when we update the spool's location field.
 		
 		if err := b.spoolman.UpdateSpoolLocation(spoolID, locationName); err != nil {
 			// If Spoolman update fails, we should still log it but not fail the entire operation

@@ -147,6 +147,50 @@
     max-width: 100%;
 }
 
+.nfc-url-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+}
+
+.nfc-url-container .nfc-url-large {
+    flex: 1;
+    margin: 0;
+}
+
+.nfc-copy-btn {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 36px;
+}
+
+.nfc-copy-btn:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.3);
+    transform: scale(1.05);
+}
+
+.nfc-copy-btn:active {
+    transform: scale(0.95);
+}
+
+.nfc-copy-icon {
+    font-size: 16px;
+    line-height: 1;
+    user-select: none;
+}
+
 /* NFC Side-by-Side Layout */
 .nfc-side-by-side {
     display: grid;

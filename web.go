@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	neturl "net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -468,8 +469,8 @@ func validateAddress(address string) error {
 	// This includes: letters, numbers, dots, hyphens, underscores, colons (for IPv6), and brackets (for IPv6)
 	// The HTTP client will perform more thorough validation when connecting
 	for _, char := range address {
-		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || 
-			(char >= '0' && char <= '9') || char == '.' || char == '-' || char == '_' || 
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '.' || char == '-' || char == '_' ||
 			char == ':' || char == '[' || char == ']') {
 			return fmt.Errorf("invalid address format: contains invalid characters")
 		}
@@ -1425,10 +1426,10 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 		}
 
 		locationParam := location.Name
-		url := fmt.Sprintf("http://%s/api/nfc/assign?location=%s", c.Request.Host, locationParam)
+		nfcUrl := fmt.Sprintf("http://%s/api/nfc/assign?location=%s", c.Request.Host, neturl.QueryEscape(locationParam))
 
 		// Generate QR code
-		qrCode, err := qrcode.Encode(url, qrcode.Medium, 256)
+		qrCode, err := qrcode.Encode(nfcUrl, qrcode.Medium, 256)
 		if err != nil {
 			log.Printf("Error generating QR code for Spoolman location %s: %v", locationParam, err)
 			// Continue without QR code if generation fails
@@ -1437,7 +1438,7 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 				"location_type":  "storage",
 				"location_name":  location.Name,
 				"display_name":   location.Name,
-				"url":            url,
+				"url":            nfcUrl,
 				"qr_code_base64": "",
 			})
 			continue
@@ -1449,7 +1450,7 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 			"location_type":  "storage",
 			"location_name":  location.Name,
 			"display_name":   location.Name,
-			"url":            url,
+			"url":            nfcUrl,
 			"qr_code_base64": qrCodeBase64,
 		})
 	}
@@ -1473,10 +1474,10 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 			}
 
 			locationParam := fmt.Sprintf("%s - %s", printerConfig.Name, displayName)
-			url := fmt.Sprintf("http://%s/api/nfc/assign?location=%s", c.Request.Host, locationParam)
+			nfcUrl := fmt.Sprintf("http://%s/api/nfc/assign?location=%s", c.Request.Host, neturl.QueryEscape(locationParam))
 
 			// Generate QR code
-			qrCode, err := qrcode.Encode(url, qrcode.Medium, 256)
+			qrCode, err := qrcode.Encode(nfcUrl, qrcode.Medium, 256)
 			if err != nil {
 				log.Printf("Error generating QR code for printer location %s: %v", locationParam, err)
 				// Continue without QR code if generation fails
@@ -1487,7 +1488,7 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 					"display_name":   locationParam,
 					"printer_name":   printerConfig.Name,
 					"toolhead_id":    toolheadID,
-					"url":            url,
+					"url":            nfcUrl,
 					"qr_code_base64": "",
 				})
 				continue
@@ -1501,7 +1502,7 @@ func (ws *WebServer) nfcUrlsHandler(c *gin.Context) {
 				"display_name":   locationParam,
 				"printer_name":   printerConfig.Name,
 				"toolhead_id":    toolheadID,
-				"url":            url,
+				"url":            nfcUrl,
 				"qr_code_base64": qrCodeBase64,
 			})
 		}

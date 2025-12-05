@@ -262,6 +262,61 @@ function renderLocationActions(url) {
     }
 }
 
+// Copy URL to clipboard
+async function copyUrlToClipboard(urlElementId, buttonElement) {
+    try {
+        const urlElement = document.getElementById(urlElementId);
+        const url = urlElement.textContent;
+        
+        if (!url) {
+            console.warn('No URL to copy');
+            return;
+        }
+        
+        // Use the Clipboard API
+        await navigator.clipboard.writeText(url);
+        
+        // Visual feedback - change icon temporarily
+        const icon = buttonElement.querySelector('.nfc-copy-icon');
+        const originalIcon = icon.textContent;
+        icon.textContent = '✓';
+        buttonElement.style.background = 'rgba(76, 175, 80, 0.3)';
+        
+        // Reset after 2 seconds
+        setTimeout(() => {
+            icon.textContent = originalIcon;
+            buttonElement.style.background = '';
+        }, 2000);
+        
+    } catch (err) {
+        console.error('Failed to copy URL:', err);
+        // Fallback for older browsers
+        const urlElement = document.getElementById(urlElementId);
+        const url = urlElement.textContent;
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            const icon = buttonElement.querySelector('.nfc-copy-icon');
+            const originalIcon = icon.textContent;
+            icon.textContent = '✓';
+            buttonElement.style.background = 'rgba(76, 175, 80, 0.3)';
+            setTimeout(() => {
+                icon.textContent = originalIcon;
+                buttonElement.style.background = '';
+            }, 2000);
+        } catch (fallbackErr) {
+            console.error('Fallback copy failed:', fallbackErr);
+            alert('Failed to copy URL. Please copy manually.');
+        }
+        document.body.removeChild(textArea);
+    }
+}
+
 // Display QR code for selected spool
 function displaySpoolQR(spoolData) {
     console.log('Displaying spool QR:', spoolData);

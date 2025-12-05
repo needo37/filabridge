@@ -39,7 +39,12 @@
                         </div>
                         <div class="nfc-qr-large-container">
                             <img id="spool-qr-large" src="" alt="QR Code" class="nfc-qr-large">
-                            <div id="spool-url-text" class="nfc-url-large"></div>
+                            <div class="nfc-url-container">
+                                <div id="spool-url-text" class="nfc-url-large"></div>
+                                <button class="nfc-copy-btn" onclick="copyUrlToClipboard('spool-url-text', this)" title="Copy URL">
+                                    <span class="nfc-copy-icon">📋</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div id="spool-no-selection" class="nfc-no-selection">
@@ -79,7 +84,12 @@
                         </div>
                         <div class="nfc-qr-large-container">
                             <img id="filament-qr-large" src="" alt="QR Code" class="nfc-qr-large">
-                            <div id="filament-url-text" class="nfc-url-large"></div>
+                            <div class="nfc-url-container">
+                                <div id="filament-url-text" class="nfc-url-large"></div>
+                                <button class="nfc-copy-btn" onclick="copyUrlToClipboard('filament-url-text', this)" title="Copy URL">
+                                    <span class="nfc-copy-icon">📋</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div id="filament-no-selection" class="nfc-no-selection">
@@ -130,7 +140,12 @@
                         </div>
                         <div class="nfc-qr-large-container">
                             <img id="location-qr-large" src="" alt="QR Code" class="nfc-qr-large">
-                            <div id="location-url-text" class="nfc-url-large"></div>
+                            <div class="nfc-url-container">
+                                <div id="location-url-text" class="nfc-url-large"></div>
+                                <button class="nfc-copy-btn" onclick="copyUrlToClipboard('location-url-text', this)" title="Copy URL">
+                                    <span class="nfc-copy-icon">📋</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div id="location-no-selection" class="nfc-no-selection">

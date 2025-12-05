@@ -587,6 +587,38 @@ func (c *SpoolmanClient) UpdateLocation(locationID int, newName string) error {
 	return nil
 }
 
+// ArchiveLocation archives a location in Spoolman
+func (c *SpoolmanClient) ArchiveLocation(locationID int) error {
+	updateData := map[string]interface{}{
+		"archived": true,
+	}
+
+	jsonData, err := json.Marshal(updateData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal location archive data: %w", err)
+	}
+
+	req, err := http.NewRequest("PATCH", fmt.Sprintf("%s/api/v1/location/%d", c.baseURL, locationID), bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("error creating PATCH request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.addAuthHeader(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("error archiving location %d in Spoolman: %w", locationID, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return c.handleAPIError(resp)
+	}
+
+	log.Printf("Successfully archived Spoolman location %d", locationID)
+	return nil
+}
+
 // UpdateLocationByName updates a location in Spoolman by name
 func (c *SpoolmanClient) UpdateLocationByName(oldName, newName string) error {
 	// First, find the location by name

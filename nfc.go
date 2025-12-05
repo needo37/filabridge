@@ -294,6 +294,12 @@ func (b *FilamentBridge) AssignSpoolToLocation(spoolID int, printerName string, 
 
 		// Update Spoolman location using proper location entities with custom name
 		locationName := fmt.Sprintf("%s - %s", printerName, displayName)
+		
+		// Ensure the location exists in Spoolman
+		if _, err := b.spoolman.GetOrCreateLocation(locationName); err != nil {
+			log.Printf("Warning: Failed to create/verify location '%s' in Spoolman: %v", locationName, err)
+		}
+		
 		if err := b.spoolman.UpdateSpoolLocation(spoolID, locationName); err != nil {
 			// If Spoolman update fails, we should still log it but not fail the entire operation
 			// since the FilaBridge mapping is more critical
@@ -311,6 +317,11 @@ func (b *FilamentBridge) AssignSpoolToLocation(spoolID int, printerName string, 
 		// Use the location name directly with Spoolman
 		if locationName == "" {
 			return fmt.Errorf("location name cannot be empty")
+		}
+
+		// Ensure the location exists in Spoolman
+		if _, err := b.spoolman.GetOrCreateLocation(locationName); err != nil {
+			log.Printf("Warning: Failed to create/verify location '%s' in Spoolman: %v", locationName, err)
 		}
 
 		// Update Spoolman location

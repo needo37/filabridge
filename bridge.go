@@ -58,16 +58,6 @@ type PrintError struct {
 	Acknowledged bool      `json:"acknowledged"`
 }
 
-// FilaBridgeLocation represents a location managed by FilaBridge
-type FilaBridgeLocation struct {
-	Name        string    `json:"name"`
-	Type        string    `json:"type"` // "printer", "storage", "other"
-	PrinterName string    `json:"printer_name,omitempty"`
-	ToolheadID  int       `json:"toolhead_id,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
 // PrinterStatus represents the current status of all printers
 type PrinterStatus struct {
 	Printers         map[string]PrinterData             `json:"printers"`
@@ -168,14 +158,6 @@ func (b *FilamentBridge) initDatabase() error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			expires_at TIMESTAMP
 		)`,
-		`CREATE TABLE IF NOT EXISTS fb_locations (
-			name TEXT PRIMARY KEY,
-			type TEXT NOT NULL DEFAULT 'storage',
-			printer_name TEXT,
-			toolhead_id INTEGER,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)`,
 		`CREATE TABLE IF NOT EXISTS toolhead_names (
 			printer_id TEXT,
 			toolhead_id INTEGER,
@@ -195,23 +177,77 @@ func (b *FilamentBridge) initDatabase() error {
 		return fmt.Errorf("failed to initialize default configuration: %w", err)
 	}
 
+	// Migrate existing FilaBridge locations to Spoolman
+	if err := b.migrateLocationsToSpoolman(); err != nil {
+		log.Printf("Warning: Failed to migrate locations to Spoolman: %v", err)
+		// Don't fail initialization if migration fails
+	}
+
+	return nil
+}
+
+// migrateLocationsToSpoolman migrates existing FilaBridge locations to Spoolman
+func (b *FilamentBridge) migrateLocationsToSpoolman() error {
+	// Check if fb_locations table exists by trying to query it
+	rows, err := b.db.Query("SELECT name, type, printer_name, toolhead_id FROM fb_locations")
+	if err != nil {
+		// Table doesn't exist or is empty, nothing to migrate
+		return nil
+	}
+	defer rows.Close()
+
+	migratedCount := 0
+	for rows.Next() {
+		var name, locationType, printerName sql.NullString
+		var toolheadID sql.NullInt64
+
+		if err := rows.Scan(&name, &locationType, &printerName, &toolheadID); err != nil {
+			log.Printf("Warning: Failed to scan location row during migration: %v", err)
+			continue
+		}
+
+		if !name.Valid || name.String == "" {
+			continue
+		}
+
+		locationName := name.String
+
+		// Skip if this is a virtual printer toolhead location (will be created on-demand)
+		if b.isVirtualPrinterToolheadLocation(locationName) {
+			log.Printf("Migration: Skipping virtual printer toolhead location '%s'", locationName)
+			continue
+		}
+
+		// Create location in Spoolman if it doesn't exist
+		if _, err := b.spoolman.GetOrCreateLocation(locationName); err != nil {
+			log.Printf("Warning: Failed to migrate location '%s' to Spoolman: %v", locationName, err)
+		} else {
+			migratedCount++
+			log.Printf("Migration: Migrated location '%s' to Spoolman", locationName)
+		}
+	}
+
+	if migratedCount > 0 {
+		log.Printf("Migration: Successfully migrated %d location(s) from FilaBridge to Spoolman", migratedCount)
+	}
+
 	return nil
 }
 
 // initializeDefaultConfig sets up default configuration values
 func (b *FilamentBridge) initializeDefaultConfig() error {
 	defaultConfigs := map[string]string{
-		ConfigKeyPrinterIPs:                   "", // Comma-separated list of printer IP addresses
-		ConfigKeyAPIKey:                       "", // PrusaLink API key for authentication
-		ConfigKeySpoolmanURL:                  DefaultSpoolmanURL,
-		ConfigKeySpoolmanUsername:             "", // Spoolman basic auth username (optional)
-		ConfigKeySpoolmanPassword:             "", // Spoolman basic auth password (optional)
-		ConfigKeyPollInterval:                 fmt.Sprintf("%d", DefaultPollInterval),
-		ConfigKeyWebPort:                      DefaultWebPort,
-		ConfigKeyPrusaLinkTimeout:             fmt.Sprintf("%d", PrusaLinkTimeout),
-		ConfigKeyPrusaLinkFileDownloadTimeout: fmt.Sprintf("%d", PrusaLinkFileDownloadTimeout),
-		ConfigKeySpoolmanTimeout:              fmt.Sprintf("%d", SpoolmanTimeout),
-		ConfigKeyAutoAssignPreviousSpoolEnabled: "false", // Enable auto-assignment of previous spool to default location
+		ConfigKeyPrinterIPs:                      "", // Comma-separated list of printer IP addresses
+		ConfigKeyAPIKey:                          "", // PrusaLink API key for authentication
+		ConfigKeySpoolmanURL:                     DefaultSpoolmanURL,
+		ConfigKeySpoolmanUsername:                "", // Spoolman basic auth username (optional)
+		ConfigKeySpoolmanPassword:                "", // Spoolman basic auth password (optional)
+		ConfigKeyPollInterval:                    fmt.Sprintf("%d", DefaultPollInterval),
+		ConfigKeyWebPort:                         DefaultWebPort,
+		ConfigKeyPrusaLinkTimeout:                fmt.Sprintf("%d", PrusaLinkTimeout),
+		ConfigKeyPrusaLinkFileDownloadTimeout:    fmt.Sprintf("%d", PrusaLinkFileDownloadTimeout),
+		ConfigKeySpoolmanTimeout:                 fmt.Sprintf("%d", SpoolmanTimeout),
+		ConfigKeyAutoAssignPreviousSpoolEnabled:  "false", // Enable auto-assignment of previous spool to default location
 		ConfigKeyAutoAssignPreviousSpoolLocation: "",      // Default location name for auto-assigned previous spools
 	}
 
@@ -241,17 +277,17 @@ func (b *FilamentBridge) initializeDefaultConfig() error {
 // getConfigDescription returns a description for a configuration key
 func getConfigDescription(key string) string {
 	descriptions := map[string]string{
-		ConfigKeyPrinterIPs:                   "Comma-separated list of printer IP addresses for PrusaLink",
-		ConfigKeyAPIKey:                       "PrusaLink API key for authentication",
-		ConfigKeySpoolmanURL:                  "URL of Spoolman instance",
-		ConfigKeySpoolmanUsername:             "Spoolman basic auth username (optional, leave empty if not using basic auth)",
-		ConfigKeySpoolmanPassword:             "Spoolman basic auth password (optional, leave empty if not using basic auth)",
-		ConfigKeyPollInterval:                 "Polling interval in seconds",
-		ConfigKeyWebPort:                      "Port for web interface",
-		ConfigKeyPrusaLinkTimeout:             "PrusaLink API timeout in seconds",
-		ConfigKeyPrusaLinkFileDownloadTimeout: "PrusaLink file download timeout in seconds",
-		ConfigKeySpoolmanTimeout:              "Spoolman API timeout in seconds",
-		ConfigKeyAutoAssignPreviousSpoolEnabled: "Enable automatic assignment of previous spool to default location when assigning new spool to toolhead",
+		ConfigKeyPrinterIPs:                      "Comma-separated list of printer IP addresses for PrusaLink",
+		ConfigKeyAPIKey:                          "PrusaLink API key for authentication",
+		ConfigKeySpoolmanURL:                     "URL of Spoolman instance",
+		ConfigKeySpoolmanUsername:                "Spoolman basic auth username (optional, leave empty if not using basic auth)",
+		ConfigKeySpoolmanPassword:                "Spoolman basic auth password (optional, leave empty if not using basic auth)",
+		ConfigKeyPollInterval:                    "Polling interval in seconds",
+		ConfigKeyWebPort:                         "Port for web interface",
+		ConfigKeyPrusaLinkTimeout:                "PrusaLink API timeout in seconds",
+		ConfigKeyPrusaLinkFileDownloadTimeout:    "PrusaLink file download timeout in seconds",
+		ConfigKeySpoolmanTimeout:                 "Spoolman API timeout in seconds",
+		ConfigKeyAutoAssignPreviousSpoolEnabled:  "Enable automatic assignment of previous spool to default location when assigning new spool to toolhead",
 		ConfigKeyAutoAssignPreviousSpoolLocation: "Default location name where previous spools will be automatically assigned (must exist as a location)",
 	}
 	if desc, exists := descriptions[key]; exists {
@@ -420,21 +456,77 @@ func (b *FilamentBridge) GetToolheadName(printerID string, toolheadID int) (stri
 
 // SetToolheadName sets the display name for a toolhead
 func (b *FilamentBridge) SetToolheadName(printerID string, toolheadID int, name string) error {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
 	// Validate name is not empty
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return fmt.Errorf("toolhead name cannot be empty")
 	}
 
-	_, err := b.db.Exec(
+	// Get printer config to find printer name (before acquiring lock)
+	printerConfigs, err := b.GetAllPrinterConfigs()
+	if err != nil {
+		return fmt.Errorf("failed to get printer configs: %w", err)
+	}
+
+	printerConfig, exists := printerConfigs[printerID]
+	if !exists {
+		return fmt.Errorf("printer %s not found", printerID)
+	}
+
+	printerName := printerConfig.Name
+
+	// Get old toolhead name to calculate old location name (before acquiring lock)
+	var oldDisplayName string
+	oldName, err := b.GetToolheadName(printerID, toolheadID)
+	if err == nil {
+		oldDisplayName = oldName
+	} else {
+		oldDisplayName = fmt.Sprintf("Toolhead %d", toolheadID)
+	}
+
+	oldLocationName := fmt.Sprintf("%s - %s", printerName, oldDisplayName)
+	newLocationName := fmt.Sprintf("%s - %s", printerName, name)
+
+	// Update toolhead name in database
+	b.mutex.Lock()
+	_, err = b.db.Exec(
 		"INSERT OR REPLACE INTO toolhead_names (printer_id, toolhead_id, display_name) VALUES (?, ?, ?)",
 		printerID, toolheadID, name,
 	)
+	b.mutex.Unlock()
+
 	if err != nil {
 		return fmt.Errorf("failed to set toolhead name: %w", err)
+	}
+
+	// If location name changed, update Spoolman (outside of lock)
+	if oldLocationName != newLocationName {
+		// Get all spools from Spoolman
+		spools, err := b.spoolman.GetAllSpools()
+		if err != nil {
+			log.Printf("Warning: Failed to get spools from Spoolman to update location names: %v", err)
+		} else {
+			// Find spools with the old location name and update them
+			updatedCount := 0
+			for _, spool := range spools {
+				if spool.Location == oldLocationName {
+					if err := b.spoolman.UpdateSpoolLocation(spool.ID, newLocationName); err != nil {
+						log.Printf("Warning: Failed to update spool %d location from '%s' to '%s': %v", spool.ID, oldLocationName, newLocationName, err)
+					} else {
+						updatedCount++
+					}
+				}
+			}
+
+			// Ensure the new location exists in Spoolman
+			if _, err := b.spoolman.GetOrCreateLocation(newLocationName); err != nil {
+				log.Printf("Warning: Failed to create/verify location '%s' in Spoolman: %v", newLocationName, err)
+			}
+
+			if updatedCount > 0 {
+				log.Printf("Updated %d spool(s) location from '%s' to '%s'", updatedCount, oldLocationName, newLocationName)
+			}
+		}
 	}
 
 	log.Printf("Set toolhead name for printer %s, toolhead %d: %s", printerID, toolheadID, name)
@@ -631,8 +723,8 @@ func (b *FilamentBridge) SetToolheadMapping(printerName string, toolheadID int, 
 		}
 
 		if locationName != "" {
-			// Verify the location exists
-			location, err := b.FindLocationByName(locationName)
+			// Verify the location exists in Spoolman
+			location, err := b.spoolman.FindLocationByName(locationName)
 			if err != nil || location == nil {
 				log.Printf("Warning: Auto-assign previous spool location '%s' does not exist, skipping auto-assignment of spool %d", locationName, previousSpoolID)
 				return nil // Don't fail the assignment
@@ -1144,240 +1236,6 @@ func (b *FilamentBridge) processFilamentUsage(printerName string, filamentUsage 
 	return nil
 }
 
-// Location Management Methods
-
-// CreateLocation creates a new FilaBridge location
-func (b *FilamentBridge) CreateLocation(name, locationType string, printerName string, toolheadID int) (*FilaBridgeLocation, error) {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	// Validate location type (allow free-text types; only special-case printer)
-	locationType = strings.TrimSpace(locationType)
-	if locationType == "" {
-		locationType = "storage"
-	}
-
-	// For printer locations, validate printer exists
-	if locationType == "printer" {
-		if printerName == "" || toolheadID < 0 {
-			return nil, fmt.Errorf("printer_name and toolhead_id required for printer locations")
-		}
-		// Check if printer exists in config
-		found := false
-		for _, printer := range b.config.Printers {
-			if printer.Name == printerName {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, fmt.Errorf("printer %s not found in configuration", printerName)
-		}
-	}
-
-	now := time.Now()
-	location := &FilaBridgeLocation{
-		Name:        name,
-		Type:        locationType,
-		PrinterName: printerName,
-		ToolheadID:  toolheadID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-
-	// Insert into database
-	_, err := b.db.Exec(
-		"INSERT INTO fb_locations (name, type, printer_name, toolhead_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-		location.Name, location.Type, location.PrinterName, location.ToolheadID, location.CreatedAt, location.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create location: %w", err)
-	}
-
-	log.Printf("Created FilaBridge location '%s' (type: %s)", location.Name, location.Type)
-	return location, nil
-}
-
-// CreateLocationFromSpoolman creates a new FilaBridge location that references an existing Spoolman location
-func (b *FilamentBridge) CreateLocationFromSpoolman(name, locationType string) (*FilaBridgeLocation, error) {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	// Validate location name
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, fmt.Errorf("location name cannot be empty")
-	}
-
-	// Validate location type (allow free-text types; only special-case printer)
-	locationType = strings.TrimSpace(locationType)
-	if locationType == "" {
-		locationType = "storage"
-	}
-
-	now := time.Now()
-	location := &FilaBridgeLocation{
-		Name:      name,
-		Type:      locationType,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-
-	// Insert into database
-	_, err := b.db.Exec(
-		"INSERT INTO fb_locations (name, type, created_at, updated_at) VALUES (?, ?, ?, ?)",
-		location.Name, location.Type, location.CreatedAt, location.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create location from Spoolman: %w", err)
-	}
-
-	log.Printf("Created FilaBridge location '%s' for Spoolman location", name)
-	return location, nil
-}
-
-// GetAllFilaBridgeLocations returns all FilaBridge locations
-func (b *FilamentBridge) GetAllFilaBridgeLocations() ([]FilaBridgeLocation, error) {
-	b.mutex.RLock()
-	defer b.mutex.RUnlock()
-
-	rows, err := b.db.Query(
-		"SELECT name, type, printer_name, toolhead_id, created_at, updated_at FROM fb_locations ORDER BY name",
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query locations: %w", err)
-	}
-	defer rows.Close()
-
-	var locations []FilaBridgeLocation
-	for rows.Next() {
-		var loc FilaBridgeLocation
-		var printerName sql.NullString
-		var toolheadID sql.NullInt64
-		err := rows.Scan(&loc.Name, &loc.Type, &printerName, &toolheadID, &loc.CreatedAt, &loc.UpdatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan location: %w", err)
-		}
-		if printerName.Valid {
-			loc.PrinterName = printerName.String
-		} else {
-			loc.PrinterName = ""
-		}
-		if toolheadID.Valid {
-			loc.ToolheadID = int(toolheadID.Int64)
-		} else {
-			loc.ToolheadID = 0
-		}
-		locations = append(locations, loc)
-	}
-
-	return locations, nil
-}
-
-// FindLocationByName finds a location by name
-func (b *FilamentBridge) FindLocationByName(name string) (*FilaBridgeLocation, error) {
-	b.mutex.RLock()
-	defer b.mutex.RUnlock()
-
-	var loc FilaBridgeLocation
-	var printerName sql.NullString
-	var toolheadID sql.NullInt64
-	err := b.db.QueryRow(
-		"SELECT name, type, printer_name, toolhead_id, created_at, updated_at FROM fb_locations WHERE name = ?",
-		name,
-	).Scan(&loc.Name, &loc.Type, &printerName, &toolheadID, &loc.CreatedAt, &loc.UpdatedAt)
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // Location not found
-		}
-		return nil, fmt.Errorf("failed to query location: %w", err)
-	}
-
-	if printerName.Valid {
-		loc.PrinterName = printerName.String
-	} else {
-		loc.PrinterName = ""
-	}
-	if toolheadID.Valid {
-		loc.ToolheadID = int(toolheadID.Int64)
-	} else {
-		loc.ToolheadID = 0
-	}
-
-	return &loc, nil
-}
-
-// UpdateLocation updates a location's name
-func (b *FilamentBridge) UpdateLocation(oldName, newName string) error {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	// Check if location exists (inline query, no nested lock)
-	var exists bool
-	err := b.db.QueryRow(
-		"SELECT 1 FROM fb_locations WHERE name = ?",
-		oldName,
-	).Scan(&exists)
-
-	if err == sql.ErrNoRows {
-		return fmt.Errorf("location '%s' not found", oldName)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to query location: %w", err)
-	}
-
-	// Update in database
-	_, err = b.db.Exec(
-		"UPDATE fb_locations SET name = ?, updated_at = ? WHERE name = ?",
-		newName, time.Now(), oldName,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update location: %w", err)
-	}
-
-	// Try to update the location in Spoolman if it exists there
-	// This will update any spools that reference the old location name
-	if err := b.spoolman.UpdateSpoolmanLocationReferences(oldName, newName); err != nil {
-		log.Printf("Warning: Failed to update Spoolman location references from '%s' to '%s': %v", oldName, newName, err)
-		// Don't fail the entire operation if Spoolman update fails
-	} else {
-		log.Printf("Successfully updated Spoolman location references from '%s' to '%s'", oldName, newName)
-	}
-
-	log.Printf("Updated FilaBridge location from '%s' to '%s'", oldName, newName)
-	return nil
-}
-
-// DeleteLocation deletes a location
-func (b *FilamentBridge) DeleteLocation(name string) error {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
-
-	// Check if location exists (inline query, no nested lock)
-	var exists bool
-	err := b.db.QueryRow(
-		"SELECT 1 FROM fb_locations WHERE name = ?",
-		name,
-	).Scan(&exists)
-
-	if err == sql.ErrNoRows {
-		return fmt.Errorf("location '%s' not found", name)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to query location: %w", err)
-	}
-
-	// Delete from database
-	_, err = b.db.Exec("DELETE FROM fb_locations WHERE name = ?", name)
-	if err != nil {
-		return fmt.Errorf("failed to delete location: %w", err)
-	}
-
-	log.Printf("Deleted location '%s'", name)
-	return nil
-}
-
 // isVirtualPrinterToolheadLocation checks if a location name matches the pattern
 // of a virtual printer toolhead location (e.g., "PrinterName - Toolhead 0" or "PrinterName - Black")
 func (b *FilamentBridge) isVirtualPrinterToolheadLocation(name string) bool {
@@ -1418,197 +1276,6 @@ func (b *FilamentBridge) isVirtualPrinterToolheadLocation(name string) bool {
 	return false
 }
 
-// GetLocationStatus returns detailed status information for a location
-func (b *FilamentBridge) GetLocationStatus(name string) (*LocationStatus, error) {
-	// Get FilaBridge location
-	fbLocation, err := b.FindLocationByName(name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find FilaBridge location: %w", err)
-	}
-	if fbLocation == nil {
-		return nil, fmt.Errorf("location '%s' not found in FilaBridge", name)
-	}
-
-	// Check if location exists in Spoolman
-	existsInSpoolman, err := b.spoolman.LocationExistsInSpoolman(name)
-	if err != nil {
-		// If we can't check Spoolman, assume it doesn't exist there
-		log.Printf("Warning: Could not check if location '%s' exists in Spoolman: %v", name, err)
-		existsInSpoolman = false
-	}
-
-	status := &LocationStatus{
-		Name:               name,
-		Type:               fbLocation.Type,
-		PrinterName:        fbLocation.PrinterName,
-		ToolheadID:         fbLocation.ToolheadID,
-		CreatedAt:          fbLocation.CreatedAt,
-		UpdatedAt:          fbLocation.UpdatedAt,
-		ExistsInFilaBridge: true,
-		ExistsInSpoolman:   existsInSpoolman,
-		IsLocalOnly:        !existsInSpoolman,
-	}
-
-	return status, nil
-}
-
-// LocationStatus represents the status of a location across both systems
-type LocationStatus struct {
-	Name               string    `json:"name"`
-	Type               string    `json:"type"`
-	PrinterName        string    `json:"printer_name,omitempty"`
-	ToolheadID         int       `json:"toolhead_id,omitempty"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
-	ExistsInFilaBridge bool      `json:"exists_in_filabridge"`
-	ExistsInSpoolman   bool      `json:"exists_in_spoolman"`
-	IsLocalOnly        bool      `json:"is_local_only"`
-}
-
-// AutoSyncSpoolmanLocations automatically syncs locations from Spoolman to FilaBridge
-// This runs on startup and periodically to keep locations in sync
-func (b *FilamentBridge) AutoSyncSpoolmanLocations() error {
-	log.Printf("AutoSyncSpoolmanLocations: Starting automatic sync...")
-
-	// Get all locations from Spoolman
-	spoolmanLocations, err := b.spoolman.GetLocations()
-	if err != nil {
-		log.Printf("AutoSyncSpoolmanLocations: Failed to get Spoolman locations: %v", err)
-		return fmt.Errorf("failed to get Spoolman locations: %w", err)
-	}
-
-	// Get all current FilaBridge locations
-	fbLocations, err := b.GetAllFilaBridgeLocations()
-	if err != nil {
-		log.Printf("AutoSyncSpoolmanLocations: Failed to get FilaBridge locations: %v", err)
-		return fmt.Errorf("failed to get FilaBridge locations: %w", err)
-	}
-
-	// Create a map of existing FilaBridge locations for quick lookup
-	fbLocationMap := make(map[string]bool)
-	for _, loc := range fbLocations {
-		fbLocationMap[loc.Name] = true
-	}
-
-	importedCount := 0
-	for _, smLocation := range spoolmanLocations {
-		// Skip archived locations
-		if smLocation.Archived {
-			continue
-		}
-
-		// Skip locations with empty or invalid names
-		if strings.TrimSpace(smLocation.Name) == "" {
-			log.Printf("AutoSyncSpoolmanLocations: Skipping location with empty name from Spoolman")
-			continue
-		}
-
-		// Skip if location already exists in FilaBridge
-		if fbLocationMap[smLocation.Name] {
-			continue
-		}
-
-		// Skip if location matches a virtual printer toolhead location
-		if b.isVirtualPrinterToolheadLocation(smLocation.Name) {
-			log.Printf("AutoSyncSpoolmanLocations: Skipping location '%s' from Spoolman - it matches a virtual printer toolhead location", smLocation.Name)
-			continue
-		}
-
-		// Create location in FilaBridge
-		_, err = b.CreateLocationFromSpoolman(smLocation.Name, "storage")
-		if err != nil {
-			log.Printf("AutoSyncSpoolmanLocations: Failed to import location '%s': %v", smLocation.Name, err)
-			continue
-		}
-
-		importedCount++
-		log.Printf("AutoSyncSpoolmanLocations: Imported location '%s' from Spoolman", smLocation.Name)
-	}
-
-	if importedCount > 0 {
-		log.Printf("AutoSyncSpoolmanLocations: Imported %d new locations from Spoolman", importedCount)
-	} else {
-		log.Printf("AutoSyncSpoolmanLocations: No new locations to import")
-	}
-
-	return nil
-}
-
-// ImportSpoolmanLocations imports all locations from Spoolman into FilaBridge cache
-// This is a one-time migration function to populate the local cache
-func (b *FilamentBridge) ImportSpoolmanLocations() error {
-	// Get all locations from Spoolman
-	spoolmanLocations, err := b.spoolman.GetLocations()
-	if err != nil {
-		return fmt.Errorf("failed to get Spoolman locations: %w", err)
-	}
-
-	importedCount := 0
-	for _, smLocation := range spoolmanLocations {
-		// Skip archived locations
-		if smLocation.Archived {
-			continue
-		}
-
-		// Check if location already exists in FilaBridge
-		existing, err := b.FindLocationByName(smLocation.Name)
-		if err != nil {
-			log.Printf("Error checking for existing location '%s': %v", smLocation.Name, err)
-			continue
-		}
-
-		if existing != nil {
-			// Location already exists, skip
-			continue
-		}
-
-		// Create location in FilaBridge
-		_, err = b.CreateLocationFromSpoolman(smLocation.Name, "storage")
-		if err != nil {
-			log.Printf("Failed to import location '%s': %v", smLocation.Name, err)
-			continue
-		}
-
-		importedCount++
-		log.Printf("Imported location '%s' from Spoolman", smLocation.Name)
-	}
-
-	log.Printf("Import complete: %d locations imported from Spoolman", importedCount)
-	return nil
-}
-
-// StartLocationSync starts the background location sync process
-func (b *FilamentBridge) StartLocationSync() {
-	// Get sync interval from config
-	syncInterval := b.config.LocationSyncInterval
-	if syncInterval == 0 {
-		syncInterval = 5 * time.Minute // Default fallback
-	}
-
-	// Run initial sync on startup
-	go func() {
-		// Wait a bit for the system to fully initialize
-		time.Sleep(5 * time.Second)
-		if err := b.AutoSyncSpoolmanLocations(); err != nil {
-			log.Printf("Startup location sync failed: %v", err)
-		}
-	}()
-
-	// Start periodic sync
-	go func() {
-		ticker := time.NewTicker(syncInterval)
-		defer ticker.Stop()
-
-		for range ticker.C {
-			if err := b.AutoSyncSpoolmanLocations(); err != nil {
-				log.Printf("Periodic location sync failed: %v", err)
-			}
-		}
-	}()
-
-	log.Printf("Location sync started - will run every %v", syncInterval)
-}
-
 // Close closes the database connection
 func (b *FilamentBridge) Close() error {
 	if b.db != nil {
@@ -1616,3 +1283,15 @@ func (b *FilamentBridge) Close() error {
 	}
 	return nil
 }
+
+// All FilaBridge location management functions have been removed - locations are now managed in Spoolman only
+// REMOVED: CreateLocationFromSpoolman
+// REMOVED: GetAllFilaBridgeLocations
+// REMOVED: FindLocationByName
+// REMOVED: UpdateLocation
+// REMOVED: DeleteLocation
+// REMOVED: GetLocationStatus
+// REMOVED: LocationStatus struct
+// REMOVED: AutoSyncSpoolmanLocations
+// REMOVED: ImportSpoolmanLocations
+// REMOVED: StartLocationSync

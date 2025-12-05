@@ -38,8 +38,6 @@ func main() {
 		log.Fatalf("Failed to update bridge config: %v", err)
 	}
 
-	// Start location sync (runs in background)
-	bridge.StartLocationSync()
 
 	// Override port from config if not specified
 	if *port == DefaultWebPort && config.WebPort != DefaultWebPort {

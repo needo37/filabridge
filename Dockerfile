@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk --no-cache add ca-certificates sqlite
+RUN apk update && apk --no-cache add ca-certificates sqlite
 
 # Create app directory
 WORKDIR /app

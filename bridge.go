@@ -232,7 +232,7 @@ func (b *FilamentBridge) migrateLocationsToSpoolman() error {
 			log.Printf("Warning: Failed to check if location '%s' exists in Spoolman: %v", locationName, err)
 			continue
 		}
-		
+
 		if existingLocation == nil {
 			log.Printf("Migration: Location '%s' does not exist in Spoolman. It will be created when referenced in a spool, or can be created manually in Spoolman UI.", locationName)
 		} else {
@@ -305,7 +305,7 @@ func (b *FilamentBridge) migrateToolheadMappingsToSpoolman() error {
 				log.Printf("Warning: Failed to check if toolhead location '%s' exists in Spoolman: %v", locationName, err)
 				continue
 			}
-			
+
 			if existingLocation == nil {
 				log.Printf("Migration: Toolhead location '%s' does not exist in Spoolman. It will be created when a spool is assigned to this toolhead.", locationName)
 			} else {
@@ -1206,6 +1206,10 @@ func (b *FilamentBridge) GetStatus() (*PrinterStatus, error) {
 			// Get current status
 			printerStatus, err := client.GetStatus()
 			if err != nil {
+				// Enhanced error logging to help diagnose connection issues
+				// This is especially useful for DNS resolution problems with hostnames
+				log.Printf("Warning: Failed to get printer status from %s (%s - %s): %v",
+					printerConfig.IPAddress, printerID, printerName, err)
 				status.Printers[printerID] = PrinterData{
 					Name:  printerName,
 					State: StateOffline,

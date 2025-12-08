@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -92,16 +93,28 @@ type PrusaLinkInfo struct {
 
 // NewPrusaLinkClient creates a new PrusaLink client
 func NewPrusaLinkClient(ipAddress, apiKey string, timeout, fileDownloadTimeout int) *PrusaLinkClient {
+	// Create a custom dialer with timeout for DNS resolution
+	// This ensures hostnames (especially .local domains) have adequate time to resolve
+	dialer := &net.Dialer{
+		Timeout:   5 * time.Second, // DNS resolution timeout
+		KeepAlive: 30 * time.Second,
+	}
+
+	transport := &http.Transport{
+		DialContext:           dialer.DialContext,
+		MaxIdleConns:          10,
+		MaxIdleConnsPerHost:   2,
+		IdleConnTimeout:       30 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second, // Timeout for receiving response headers
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
 	return &PrusaLinkClient{
 		baseURL: fmt.Sprintf("http://%s", ipAddress),
 		apiKey:  apiKey,
 		httpClient: &http.Client{
-			Timeout: time.Duration(timeout) * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        10,
-				MaxIdleConnsPerHost: 2,
-				IdleConnTimeout:     30 * time.Second,
-			},
+			Timeout:   time.Duration(timeout) * time.Second,
+			Transport: transport,
 		},
 	}
 }
@@ -264,9 +277,16 @@ func (c *PrusaLinkClient) GetGcodeFileWithRetry(filename string, fileDownloadTim
 		log.Printf("Downloading G-code file attempt %d/%d: %s", attempt+1, maxRetries, filename)
 
 		// Create a new client with extended timeout for file downloads
+		// Use the same DNS timeout configuration for consistency
+		fileDialer := &net.Dialer{
+			Timeout:   5 * time.Second, // DNS resolution timeout
+			KeepAlive: 30 * time.Second,
+		}
+
 		fileClient := &http.Client{
 			Timeout: time.Duration(fileDownloadTimeout) * time.Second,
 			Transport: &http.Transport{
+				DialContext:           fileDialer.DialContext,
 				MaxIdleConns:          10,
 				MaxIdleConnsPerHost:   2,
 				IdleConnTimeout:       90 * time.Second,
